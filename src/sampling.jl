@@ -8,7 +8,8 @@ function generate(model::Transformer{T},
                  max_new_tokens=100,
                  sampler::Function=default_sampler,
                  encoder_for_printing = nothing,
-                 end_token = 128010) where {T, IntT}
+                 end_token = 128010,
+                 device = identity) where {T, IntT}
     
     # Initialize sequence with a new copy of the tokens
     current_len = length(initial_tokens)
@@ -21,7 +22,8 @@ function generate(model::Transformer{T},
             1,  # batch_size
             current_len + max_new_tokens,  # max possible sequence length
             layer.attention.n_kv_heads,
-            layer.attention.head_dim
+            layer.attention.head_dim,
+            device = device
         )
     end
     # Process the initial sequence

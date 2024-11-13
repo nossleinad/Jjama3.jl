@@ -95,16 +95,16 @@ struct KVCache{T}
     cache_v::AbstractArray{T, 4} 
 end
 
-function KVCache(T, batch_size::Int, seq_length::Int, n_kv_heads::Int, head_dim::Int)
-    cache_k = zeros(T, head_dim, seq_length, n_kv_heads, batch_size)
-    cache_v = zeros(T, head_dim, seq_length, n_kv_heads, batch_size)
+function KVCache(T, batch_size::Int, seq_length::Int, n_kv_heads::Int, head_dim::Int; device = identity)
+    cache_k = zeros(T, head_dim, seq_length, n_kv_heads, batch_size) |> device
+    cache_v = zeros(T, head_dim, seq_length, n_kv_heads, batch_size) |> device
     KVCache(cache_k, cache_v)
 end
 
 function update_kv_cache(cache::KVCache, start_pos::Int, xk::AbstractArray, xv::AbstractArray)
     seqlen = size(xk, 2)
-    cache.cache_k[:, (start_pos+1):(start_pos+seqlen), :, :] = xk
-    cache.cache_v[:, (start_pos+1):(start_pos+seqlen), :, :] = xv
+    cache.cache_k[:, (start_pos+1):(start_pos+seqlen), :, :] .= xk
+    cache.cache_v[:, (start_pos+1):(start_pos+seqlen), :, :] .= xv
     return cache.cache_k[:, 1:(start_pos+seqlen), :, :],
            cache.cache_v[:, 1:(start_pos+seqlen), :, :]
 end
@@ -118,7 +118,7 @@ function repeat_kv(x::AbstractArray, n_rep::Int)
     head_dim, seq_len, n_kv_heads, batch = size(x)
     x_expanded = reshape(x, (head_dim, seq_len, 1, n_kv_heads, batch))
     x_repeated = repeat(x_expanded, 1, 1, n_rep, 1, 1)
-    #Metal.@allowscalar x_repeated = repeat(x_expanded, 1, 1, n_rep, 1, 1)
+    x_repeated = repeat(x_expanded, 1, 1, n_rep, 1, 1)
     return reshape(x_repeated, (head_dim, seq_len, n_rep * n_kv_heads, batch))
 end
 
