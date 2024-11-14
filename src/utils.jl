@@ -1,3 +1,12 @@
+"""
+    tkn = llama3_tokenizer()
+
+Load the tokenizer for Llama3. This seems to work, but I have not checked if there are some different edge-cases, or missing tokens relative to the original tokenizer (besides the special tokens we hackily include).
+
+    tkn = llama3_tokenizer()
+    tkn.encode("What is the capital of France?")
+    tkn.decode([10, 2, 5, 99])
+"""
 llama3_tokenizer() = BytePairEncoding.load_tiktoken_encoder("cl100k_base")
 
 """
@@ -88,19 +97,17 @@ function load_llama3_from_safetensors(paths::Vector{String}, config; T = Float32
     
     for path in paths # Process one file at a time
         weights = load_safetensors(path)
-        
+        if (haskey(weights, "lm_head.weight") && (config[:tie_word_embeddings]))
+            error("tie_word_embeddings was true, but lm_head.weight was present.")
+        end
         if haskey(weights, "model.embed_tokens.weight")
             model.tok_embeddings.weight .= weights["model.embed_tokens.weight"]'
             if config[:tie_word_embeddings]
                 model.output.weight .= weights["model.embed_tokens.weight"]
             end
         end
-        if !config[:tie_word_embeddings]
-            if haskey(weights, "lm_head.weight")
-                model.output.weight .= weights["lm_head.weight"]
-            else
-                error("tie_word_embeddings was true, but lm_head.weight was present.")
-            end
+        if haskey(weights, "lm_head.weight")
+            model.output.weight .= weights["lm_head.weight"]
         end
         if haskey(weights, "model.norm.weight")
             model.norm.weight .= weights["model.norm.weight"]
