@@ -20,4 +20,6 @@ makedocs(;
 deploydocs(;
     repo="github.com/MurrellGroup/Jjama3.jl",
     devbranch="main",
+    devurl="dev",
+    versions = ["stable" => "v^", "v#.#", devurl => devurl],
 )
