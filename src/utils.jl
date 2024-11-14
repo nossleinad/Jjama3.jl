@@ -10,6 +10,7 @@ Format a prompt for use with Llama3.2's instruction format, with a simple "You a
 assistant_prompt(prompt, tkn) = format_llama32_instruction_prompt("\nYou are a helpful assistant\n", prompt, tkn);
 
 
+#https://www.llama.com/docs/model-cards-and-prompt-formats/llama3_2/
 """
 Format a prompt for use with Llama3.2's instruction format, injecting the system and user roles.
 
@@ -17,9 +18,8 @@ Format a prompt for use with Llama3.2's instruction format, injecting the system
     prompt = format_llama32_instruction_prompt("\\nYou are a helpful assistant\\n", "What is the capital of France?", tkn)
     generate(model, prompt, max_new_tokens=100, encoder_for_printing=tkn)
 """
-function format_llama32_instruction_prompt(sys_prompt, user_prompt, tokenizer)
-    #begin_of_text, start_header_id
-    prompt = [128001, 128007] #plus 1 because Julia is 1-indexed
+function format_llama32_instruction_prompt(sys_prompt, user_prompt, tokenizer) 
+    prompt = [128001, 128007] #begin_of_text, start_header_id
     prompt = vcat(prompt, tokenizer.encode("system"))
     push!(prompt, 128008) #end_header_id
     prompt = vcat(prompt, tokenizer.encode(sys_prompt))
@@ -28,11 +28,24 @@ function format_llama32_instruction_prompt(sys_prompt, user_prompt, tokenizer)
     push!(prompt, 128008) #end_header_id
     prompt = vcat(prompt, tokenizer.encode("\n"))
     prompt = vcat(prompt, tokenizer.encode(user_prompt))
-    prompt = vcat(prompt, [128009, 128007]) #eot_id, start_header_id
+    prompt = vcat(prompt, [128010, 128007]) #eot_id, start_header_id
     prompt = vcat(prompt, tokenizer.encode("assistant"))
     push!(prompt, 128008) #end_header_id
     return prompt
 end
+
+#These have already been incremented by 1 to account for Julia's 1-indexing
+special_tokens = Dict(
+    "<|begin_of_text|>" => 128001,
+    "<|end_of_text|>" => 128002,
+    "<|start_header_id|>" => 128007,
+    "<|end_header_id|>" => 128008,
+    "<|eot_id|>" => 128010,
+    "<|finetune_right_pad_id|>" => 128005,
+    "<|python_tag|>" => 128011
+)
+
+#[ "<|start_header_id|>user<|end_header_id|>\n\nGiven the following question and four candidate answers (A, B, C and D), choose the best answer.\nQuestion: An astronomer observes that a planet rotates faster after a meteorite impact. Which is the most likely effect of this increase in rotation?\nA. Planetary density will decrease.\nB. Planetary years will become longer.\nC. Planetary days will become shorter.\nD. Planetary gravity will become stronger.\nYour response should end with \"The best answer is [the_answer_letter]\" where the [the_answer_letter] is one of A, B, C or D.<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\nThe best answer is" ]
 
 
 """
@@ -131,3 +144,4 @@ function load_llama3_from_safetensors(paths::Vector{String}, config; T = Float32
 end
 
 load_llama3_from_safetensors(path::String, config; T = Float32) = load_llama3_from_safetensors([path], config; T = T)
+
