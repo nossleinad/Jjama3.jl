@@ -24,6 +24,8 @@ top_pk_sampler(;p = 0.5f0, k = 5, device = identity) = logits -> top_pk_sampler(
 # to the sampling of each token. But when I try and fix it, the model gets slightly dumber.
 # Vibes feel like a shift-by-1 in the RoPE, or something similar. Need to investigate when I find time.
 """
+    generate(model, initial_tokens; max_new_tokens=100, sampler=top_pk_sampler(p=0.5f0, k=5), encoder_for_printing=tkn, end_token=128010)
+    
 Takes an initial sequence of tokens, and generates new tokens one at a time until the end token is sampled. Uses a KV cache. No batch dim for now.
 Runs on CPU by default. If the model is on the GPU (assuming Flux.jl, eg. `model = gpu(model)`), then pass `device = gpu` to `generate` to run on the GPU.
 

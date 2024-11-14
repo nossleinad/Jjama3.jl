@@ -1,6 +1,8 @@
 llama3_tokenizer() = BytePairEncoding.load_tiktoken_encoder("cl100k_base")
 
 """
+    generate(model, prompt, max_new_tokens=100, encoder_for_printing=tkn)
+
 Format a prompt for use with Llama3.2's instruction format, with a simple "You are a helpful assistant" system prompt.
 
     tkn = llama3_tokenizer()
@@ -12,6 +14,8 @@ assistant_prompt(prompt, tkn) = format_llama32_instruction_prompt("\nYou are a h
 
 #https://www.llama.com/docs/model-cards-and-prompt-formats/llama3_2/
 """
+    generate(model, prompt, max_new_tokens=100, encoder_for_printing=tkn)
+
 Format a prompt for use with Llama3.2's instruction format, injecting the system and user roles.
 
     tkn = llama3_tokenizer()
@@ -49,6 +53,8 @@ special_tokens = Dict(
 
 
 """
+    model = load_llama3_from_safetensors(model_weight_paths, config)
+
 Load a Llama3 model from a set of Huggingface safetensors files, and the config.json file.
 Important note: Huggingface uses a different RoPE convention than other implementations,
 so if you're loading weights from a different source, you might get very poor model performance.
