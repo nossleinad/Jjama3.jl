@@ -1,9 +1,11 @@
-#Important about output layer being tied to embedding: https://github.com/meta-llama/llama-models/issues/172
+#Note about output layer being tied to embedding: https://github.com/meta-llama/llama-models/issues/172
 
 function apply_scaling(freqs::AbstractVector; scale_factor=8)
+    #Hard-coded - I should move these to the main model struct and grab them from the config.
     low_freq_factor = 1
     high_freq_factor = 4
-    old_context_len = 8192  # original llama3 length
+    old_context_len = 8192
+    ###
     low_freq_wavelen = old_context_len / low_freq_factor
     high_freq_wavelen = old_context_len / high_freq_factor
     new_freqs = similar(freqs)
@@ -38,7 +40,7 @@ function precompute_freqs_cis(dim::Int, end_pos::Int;
 end
 
 
-#https://discuss.huggingface.co/t/is-llama-rotary-embedding-implementation-correct/44509
+#Note about Huggingface weights and rotary embeddings: https://discuss.huggingface.co/t/is-llama-rotary-embedding-implementation-correct/44509
 #Use this one if you're using the Hugging Face weights.
 function apply_rotary_emb(x, freqs_cis)
     # x is (head_dim, seq_len, n_heads, batch)
@@ -118,7 +120,6 @@ function repeat_kv(x::AbstractArray, n_rep::Int)
     head_dim, seq_len, n_kv_heads, batch = size(x)
     x_expanded = reshape(x, (head_dim, seq_len, 1, n_kv_heads, batch))
     x_repeated = repeat(x_expanded, 1, 1, n_rep, 1, 1)
-    x_repeated = repeat(x_expanded, 1, 1, n_rep, 1, 1)
     return reshape(x_repeated, (head_dim, seq_len, n_rep * n_kv_heads, batch))
 end
 
@@ -167,7 +168,7 @@ function (attn::Attention)(x::AbstractArray{T}, start_pos::Int, freqs_cis, mask=
     xk = reshape(xk, (attn.head_dim, attn.n_kv_heads, seqlen, batch))
     xv = reshape(xv, (attn.head_dim, attn.n_kv_heads, seqlen, batch))
 
-    #Can we switch to keeping this in its shape, aplpying rot emb in that shape, and only permuting one 
+    #Some GPUs don't like PermutedDimsArray
     #xq = PermutedDimsArray(xq, (1,3,2,4)) #No idea if this is faster...
     #xk = PermutedDimsArray(xk, (1,3,2,4))
     #xv = PermutedDimsArray(xv, (1,3,2,4))
@@ -175,29 +176,26 @@ function (attn::Attention)(x::AbstractArray{T}, start_pos::Int, freqs_cis, mask=
     xk = permutedims(xk, (1,3,2,4))
     xv = permutedims(xv, (1,3,2,4))
 
-    # Apply RoPE
     xq_rope = apply_rotary_emb(xq, freqs_cis)
     xk_rope = apply_rotary_emb(xk, freqs_cis)
-    # Handle KV cache
+
     if !isnothing(attn.cache)
         xk_rope, xv = update_kv_cache(attn.cache, start_pos, xk_rope, xv)
     end
+
     # Apply GQA via repeat_kv
     xk_rope = repeat_kv(xk_rope, attn.n_rep)
     xv = repeat_kv(xv, attn.n_rep)
-    # Reshape for attention - dummy dim is seqlength, which isn't the length of the seq when using the KV cache
+    
     xq_for_attn = reshape(xq_rope, attn.head_dim, :,  attn.n_heads * batch)
     xk_for_attn = reshape(xk_rope, attn.head_dim, :, attn.n_heads * batch)
     xv_for_attn = reshape(xv, attn.head_dim, :, attn.n_heads * batch)
-    # Compute attention scores
     
     scores = batched_mul(
         0f0 .+ permutedims(xq_for_attn, (2,1,3)),  # (seqlen, head_dim, batch*heads)
         0f0 .+xk_for_attn                          # (head_dim, seqlen, batch*heads)
     ) ./ sqrt(T(attn.head_dim))
     if !isnothing(mask)
-        #@show typeof(scores)
-        #@show typeof(mask)
         scores = scores .+ mask
     end
     #len: 3, len: 3, headsxbatch: 8
@@ -298,28 +296,34 @@ function forward_inference(model::Transformer{T}, tokens::AbstractArray{Int}, st
     return output
 end
 
+function create_mask(h::AbstractArray)
+    embeddim, seqlen, batch = size(h)
+    mask = similar(h, seqlen, seqlen)
+    T = eltype(h)
+    mask .= T(-Inf)
+    mask = triu(mask, 1)
+    return mask
+end
+
 function forward_loss(model::Transformer{T}, inputs::AbstractArray, 
                      targets::AbstractArray; ignore_index::Int=-100,
-                     mask = triu(fill(T(-Inf), (size(inputs, 1), size(inputs, 1))),1)) where T
+                     mask = :auto) where T
     seqlen = size(inputs, 1) #(seq_len, batch)
     h = model.tok_embeddings(inputs) # (dim, seq_len, batch)
-
     cos, sin = model.freqs_cis #@show size(cos) #(head_dim/2, max_RoPE, 1, 1)
     freqs_cis = (cos[:,1:seqlen,:,:], sin[:,1:seqlen,:,:])
-
     # Forward through layers (start_pos = 0 disables KV caching)
+    if mask == :auto
+        mask = create_mask(h)
+    end
     for layer in model.layers
         h = layer(h, 0, freqs_cis, mask)
     end
     h = model.norm(h)
     logits = model.output(h)
-    #@show size(logits)
     # Need to reshape to (vocab_size, seq_len * batch)
     logits_2d = reshape(logits, size(logits,1), :)
-    #@show [argmax(logits_2d[:,i]) for i in 1:size(logits_2d,2)]
-    #@show size(logits_2d)
     targets_1d = reshape(targets, :)
-    #@show size(targets_1d)
     # Mask out ignored indices - will handle this later.
     # Note: this is not the autoregressive mask, but the mask for the loss function
     #=
@@ -335,16 +339,9 @@ function forward_loss(model::Transformer{T}, inputs::AbstractArray,
     =#
     vocab_size = size(model.tok_embeddings.weight, 2)
     gt = Flux.onehotbatch(targets_1d, 1:vocab_size)
-    #@show size(gt)
     loss = Flux.logitcrossentropy(logits_2d, gt)
-    #@show Flux.logitcrossentropy(logits_2d, gt, agg = identity)
     return loss
 end
-
-
-
-
-
 
 
 #https://discuss.huggingface.co/t/is-llama-rotary-embedding-implementation-correct/44509
