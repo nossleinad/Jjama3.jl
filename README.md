@@ -1,4 +1,4 @@
-# Jjama3 - Hackable Llama3.1 and Llama3.2 in Julia
+# Jjama3 - Hackable Llama3.1 and Llama3.2 (text) in Julia
 
 [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://MurrellGroup.github.io/Jjama3.jl/stable/)
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://MurrellGroup.github.io/Jjama3.jl/dev/)
