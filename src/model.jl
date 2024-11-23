@@ -276,19 +276,7 @@ function forward_inference(model::Transformer{T}, tokens::AbstractArray{Int}, st
     cos, sin = model.freqs_cis #@show size(cos) #(head_dim/2, max_RoPE, 1, 1)
     freqs_cis = (cos[:,start_pos+1:start_pos+seqlen,:,:], sin[:,start_pos+1:start_pos+seqlen,:,:])
     
-    #=
-    mask = nothing
-    if seqlen > 1
-        #mask = fill(T(-Inf), (seqlen, seqlen))
-        mask = similar(h, seqlen, seqlen)
-        mask .= T(-Inf)
-        mask = triu(mask, 1)
-        # Add zeros for cached sequence
-        if start_pos > 0
-            mask = hcat(zeros(T, seqlen, start_pos), mask)
-        end
-    end
-    =#
+
     mask = create_mask(h)
     for layer in model.layers
         h = layer(h, start_pos, freqs_cis, mask)
