@@ -45,12 +45,12 @@ end
 function apply_rotary_emb(x, freqs_cis)
     # x is (head_dim, seq_len, n_heads, batch)
     head_dim, seq_len, n_heads, batch = size(x)
-    x1 = x[1:head_dim÷2, :, :, :]
-    x2 = x[head_dim÷2+1:end, :, :, :]
+    x1 = @view x[1:head_dim÷2, :, :, :]
+    x2 = @view x[head_dim÷2+1:end, :, :, :]
     cos, sin = freqs_cis
-    out = vcat(
-        x1 .* cos[:,1:seq_len,:] .- x2 .* sin[:,1:seq_len,:],  
-        x2 .* cos[:,1:seq_len,:] .+ x1 .* sin[:,1:seq_len,:]   
+    out = vcat(  
+        x1 .* cos .- x2 .* sin,
+        x2 .* cos .+ x1 .* sin
     )
     return out
 end
@@ -111,16 +111,12 @@ function update_kv_cache(cache::KVCache, start_pos::Int, xk::AbstractArray, xv::
            cache.cache_v[:, 1:(start_pos+seqlen), :, :]
 end
 
+
 function repeat_kv(x::AbstractArray, n_rep::Int)
-    # x is (head_dim, seq_len, n_kv_heads, batch)
-    # output should be (head_dim, seq_len, n_rep * n_kv_heads, batch)
     if n_rep == 1
         return x
     end
-    head_dim, seq_len, n_kv_heads, batch = size(x)
-    x_expanded = reshape(x, (head_dim, seq_len, 1, n_kv_heads, batch))
-    x_repeated = repeat(x_expanded, 1, 1, n_rep, 1, 1)
-    return reshape(x_repeated, (head_dim, seq_len, n_rep * n_kv_heads, batch))
+    return repeat(x, 1, n_rep, 1, 1)
 end
 
 mutable struct Attention
@@ -154,27 +150,18 @@ end
 function (attn::Attention)(x::AbstractArray{T}, start_pos::Int, freqs_cis, mask=nothing) where T
     dim, seqlen, batch = size(x)
 
-    # Project Q,K,V
     xq = attn.wq(x)
     xk = attn.wk(x)
     xv = attn.wv(x)
 
-    #Reshaping dim: 8, len: 3, batch: 2
-    #           to: 2, 3, 4, 2
-    # RoPE input needs (head_dim, len, n_heads, batch)
-    
-    # Reshape to separate heads
     xq = reshape(xq, (attn.head_dim, attn.n_heads, seqlen, batch))
     xk = reshape(xk, (attn.head_dim, attn.n_kv_heads, seqlen, batch))
     xv = reshape(xv, (attn.head_dim, attn.n_kv_heads, seqlen, batch))
 
-    #Some GPUs don't like PermutedDimsArray
-    #xq = PermutedDimsArray(xq, (1,3,2,4)) #No idea if this is faster...
-    #xk = PermutedDimsArray(xk, (1,3,2,4))
-    #xv = PermutedDimsArray(xv, (1,3,2,4))
-    xq = permutedims(xq, (1,3,2,4)) 
-    xk = permutedims(xk, (1,3,2,4))
-    xv = permutedims(xv, (1,3,2,4))
+    #Lazy permute dims. Need to test CUDA.
+    xq = PermutedDimsArray(xq, (1,3,2,4))
+    xk = PermutedDimsArray(xk, (1,3,2,4))
+    xv = PermutedDimsArray(xv, (1,3,2,4))
 
     xq_rope = apply_rotary_emb(xq, freqs_cis)
     xk_rope = apply_rotary_emb(xk, freqs_cis)
@@ -183,28 +170,40 @@ function (attn::Attention)(x::AbstractArray{T}, start_pos::Int, freqs_cis, mask=
         xk_rope, xv = update_kv_cache(attn.cache, start_pos, xk_rope, xv)
     end
 
-    # Apply GQA via repeat_kv
     xk_rope = repeat_kv(xk_rope, attn.n_rep)
-    xv = repeat_kv(xv, attn.n_rep)
+    xv      = repeat_kv(xv, attn.n_rep)
     
     xq_for_attn = reshape(xq_rope, attn.head_dim, :,  attn.n_heads * batch)
     xk_for_attn = reshape(xk_rope, attn.head_dim, :, attn.n_heads * batch)
     xv_for_attn = reshape(xv, attn.head_dim, :, attn.n_heads * batch)
     
+    #=
     scores = batched_mul(
-        0f0 .+ permutedims(xq_for_attn, (2,1,3)),  # (seqlen, head_dim, batch*heads)
-        0f0 .+xk_for_attn                          # (head_dim, seqlen, batch*heads)
+        permutedims(xq_for_attn, (2,1,3)),  # (seqlen, head_dim, batch*heads)
+        #batched_transpose(xq_for_attn),  # (seqlen, head_dim, batch*heads)
+        xk_for_attn                          # (head_dim, seqlen, batch*heads)
     ) ./ sqrt(T(attn.head_dim))
     if !isnothing(mask)
         scores = scores .+ mask
     end
-    #len: 3, len: 3, headsxbatch: 8
-    sm_scores = softmax(scores; dims=2)  # Need to get this over dim 1 for efficiency!
-    #len: 3, head_dim: 2, headsxbatch: 8
+    sm_scores = softmax(scores; dims=2) 
     output = batched_mul(sm_scores, permutedims(xv_for_attn, (2,1,3)))
-    # Reshape back to separate batch and heads
     e_output = reshape(output, (seqlen, attn.head_dim, attn.n_heads, batch))
     p_output = permutedims(e_output, (2,3,1,4))  # (n_heads, head_dim, seqlen, batch)
+    =#
+    
+    scores = batched_mul(
+        batched_transpose(xk_for_attn),  
+        xq_for_attn                         
+    ) ./ sqrt(T(attn.head_dim))
+    if !isnothing(mask)
+        scores = scores .+ mask
+    end
+    sm_scores = softmax(scores; dims=1)
+    output = batched_mul(xv_for_attn, sm_scores)
+    e_output = reshape(output, (attn.head_dim, seqlen, attn.n_heads, batch))
+    p_output = permutedims(e_output, (1,3,2,4)) 
+    
     r_output = reshape(p_output, (attn.head_dim * attn.n_heads, seqlen, batch))
     proj = attn.wo(r_output)
     return proj
@@ -277,6 +276,7 @@ function forward_inference(model::Transformer{T}, tokens::AbstractArray{Int}, st
     cos, sin = model.freqs_cis #@show size(cos) #(head_dim/2, max_RoPE, 1, 1)
     freqs_cis = (cos[:,start_pos+1:start_pos+seqlen,:,:], sin[:,start_pos+1:start_pos+seqlen,:,:])
     
+    #=
     mask = nothing
     if seqlen > 1
         #mask = fill(T(-Inf), (seqlen, seqlen))
@@ -288,6 +288,8 @@ function forward_inference(model::Transformer{T}, tokens::AbstractArray{Int}, st
             mask = hcat(zeros(T, seqlen, start_pos), mask)
         end
     end
+    =#
+    mask = create_mask(h)
     for layer in model.layers
         h = layer(h, start_pos, freqs_cis, mask)
     end
@@ -301,7 +303,8 @@ function create_mask(h::AbstractArray)
     mask = similar(h, seqlen, seqlen)
     T = eltype(h)
     mask .= T(-Inf)
-    mask = triu(mask, 1)
+    #mask = triu(mask, 1)
+    mask = tril(mask, -1)
     return mask
 end
 
