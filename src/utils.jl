@@ -1,64 +1,34 @@
-"""
-    tkn = llama3_tokenizer()
+encode(tkn::Tokenizer, str) = HuggingFaceTokenizers.encode(tkn, str).ids .+ 1
+decode(tkn::Tokenizer, ids) = HuggingFaceTokenizers.decode(tkn, ids .- 1)
 
-Load the tokenizer for Llama3. This seems to work, but I have not checked if there are some different edge-cases, or missing tokens relative to the original tokenizer (besides the special tokens we hackily include).
 
-    tkn = llama3_tokenizer()
-    tkn.encode("What is the capital of France?")
-    tkn.decode([10, 2, 5, 99])
-"""
-llama3_tokenizer() = BytePairEncoding.load_tiktoken_encoder("cl100k_base")
+#https://www.llama.com/docs/model-cards-and-prompt-formats/llama3_2/
+function llama3_instruct_prompt(tokenizer,system_prompt, user_prompt)
+    str = """<|start_header_id|>system<|end_header_id|>
+$system_prompt
+<|eot_id|><|start_header_id|>user<|end_header_id|>
+
+$(user_prompt)<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
+    return encode(tokenizer, str)
+end
 
 """
     generate(model, prompt, max_new_tokens=100, encoder_for_printing=tkn)
 
 Format a prompt for use with Llama3.2's instruction format, with a simple "You are a helpful assistant" system prompt.
 
-    tkn = llama3_tokenizer()
-    prompt = assistant_prompt("What is the capital of France?", tkn)
+    prompt = assistant_prompt(tkn, "What is the capital of France?")
     generate(model, prompt, max_new_tokens=100, encoder_for_printing=tkn)
 """
-assistant_prompt(prompt, tkn) = format_llama32_instruction_prompt("\nYou are a helpful assistant\n", prompt, tkn);
+llama3_assistant_prompt(tokenizer, prompt) = llama3_instruct_prompt(tokenizer,"\nYou are a helpful assistant\n", prompt);
 
-
-#https://www.llama.com/docs/model-cards-and-prompt-formats/llama3_2/
-"""
-    generate(model, prompt, max_new_tokens=100, encoder_for_printing=tkn)
-
-Format a prompt for use with Llama3.2's instruction format, injecting the system and user roles.
-
-    tkn = llama3_tokenizer()
-    prompt = format_llama32_instruction_prompt("\\nYou are a helpful assistant\\n", "What is the capital of France?", tkn)
-    generate(model, prompt, max_new_tokens=100, encoder_for_printing=tkn)
-"""
-function format_llama32_instruction_prompt(sys_prompt, user_prompt, tokenizer) 
-    prompt = [128001, 128007] #begin_of_text, start_header_id
-    prompt = vcat(prompt, tokenizer.encode("system"))
-    push!(prompt, 128008) #end_header_id
-    prompt = vcat(prompt, tokenizer.encode(sys_prompt))
-    prompt = vcat(prompt, [128010, 128007]) #eot_id, start_header_id
-    prompt = vcat(prompt, tokenizer.encode("user"))
-    push!(prompt, 128008) #end_header_id
-    prompt = vcat(prompt, tokenizer.encode("\n"))
-    prompt = vcat(prompt, tokenizer.encode(user_prompt))
-    prompt = vcat(prompt, [128010, 128007]) #eot_id, start_header_id
-    prompt = vcat(prompt, tokenizer.encode("assistant"))
-    push!(prompt, 128008) #end_header_id
-    return prompt
+function smollm2_instruct_prompt(tokenizer, system_prompt, user_prompt)
+    str = """<|im_start|>system\n$(system_prompt)<|im_end|>\n<|im_start|>user\n$(user_prompt)<|im_end|>\n"""
+    return encode(tokenizer, str)
 end
 
-#These have already been incremented by 1 to account for Julia's 1-indexing
-special_tokens = Dict(
-    "<|begin_of_text|>" => 128001,
-    "<|end_of_text|>" => 128002,
-    "<|start_header_id|>" => 128007,
-    "<|end_header_id|>" => 128008,
-    "<|eot_id|>" => 128010,
-    "<|finetune_right_pad_id|>" => 128005,
-    "<|python_tag|>" => 128011
-)
+smollm2_assistant_prompt(tokenizer, prompt) = smollm2_instruct_prompt(tokenizer, "You are a helpful AI assistant named SmolLM, trained by Hugging Face", prompt);
 
-#[ "<|start_header_id|>user<|end_header_id|>\n\nGiven the following question and four candidate answers (A, B, C and D), choose the best answer.\nQuestion: An astronomer observes that a planet rotates faster after a meteorite impact. Which is the most likely effect of this increase in rotation?\nA. Planetary density will decrease.\nB. Planetary years will become longer.\nC. Planetary days will become shorter.\nD. Planetary gravity will become stronger.\nYour response should end with \"The best answer is [the_answer_letter]\" where the [the_answer_letter] is one of A, B, C or D.<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\nThe best answer is" ]
 
 
 """
@@ -75,12 +45,18 @@ so if you're loading weights from a different source, you might get very poor mo
 """
 function load_llama3_from_safetensors(paths::Vector{String}, config; T = Float32)
     config = Dict(config) #Just in case the user passed eg. a JSON3.Object
-    @assert config[:rope_scaling][:rope_type] == "llama3"
-    @assert config[:rope_scaling][:low_freq_factor] == 1
-    @assert config[:rope_scaling][:high_freq_factor] == 4
-    @assert config[:rope_scaling][:original_max_position_embeddings] == 8192
+    #@assert config[:rope_scaling][:rope_type] == "llama3"
+    #@assert config[:rope_scaling][:low_freq_factor] == 1
+    #@assert config[:rope_scaling][:high_freq_factor] == 4
+    #@assert config[:rope_scaling][:original_max_position_embeddings] == 8192
 
     # Create model with config parameters from the JSON
+    scale_factor = 1f0
+    if haskey(config, :rope_scaling)
+        if !isnothing(config[:rope_scaling])
+            scale_factor = config[:rope_scaling][:factor]
+        end
+    end
     model = Transformer(
         config[:vocab_size],                        # vocab_size
         config[:hidden_size],                       # dim (hidden_size)
@@ -92,7 +68,7 @@ function load_llama3_from_safetensors(paths::Vector{String}, config; T = Float32
         norm_eps=T(config[:rms_norm_eps]),          # rms_norm_eps
         rope_theta=T(config[:rope_theta]),          # rope_theta
         use_scaled_rope=true,                       # Using scaled RoPE based on the config
-        scale_factor=config[:rope_scaling][:factor] # scale_factor
+        scale_factor=scale_factor                   # scale_factor
     )
     
     for path in paths # Process one file at a time

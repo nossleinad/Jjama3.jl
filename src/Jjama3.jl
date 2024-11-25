@@ -1,23 +1,33 @@
 module Jjama3
 
-using Flux, BytePairEncoding, SafeTensors, Distributions, LinearAlgebra, StatsBase, NNlib
+using Flux, SafeTensors, Distributions, LinearAlgebra, StatsBase, NNlib
+import HuggingFaceTokenizers
+
+tokenizer_from_repo = HuggingFaceTokenizers.from_pretrained
+tokenizer_from_file = HuggingFaceTokenizers.from_file
+Tokenizer = HuggingFaceTokenizers.Tokenizer
 
 include("model.jl")
 include("utils.jl")
 include("sampling.jl")
-include("tokenizers.jl")
 
-export  load_huggingface_tokenizer_and_encoder,
-        load_llama321B_from_safetensors, 
+export  load_llama321B_from_safetensors, 
         load_llama3_from_safetensors, 
-        llama3_tokenizer, 
-        assistant_prompt, 
-        format_llama32_instruction_prompt, 
         generate, 
         forward_loss, 
         forward_inference, 
         top_pk_sampler, 
         argmax_sampler,
-        load_huggingface_tokenizer_and_encoder
+        top_n_sigma_sampler,
+        min_p_sampler,
+        tokenizer_from_repo,
+        tokenizer_from_file,
+        encode,
+        decode,
+        Tokenizer,
+        llama3_instruct_prompt,
+        llama3_assistant_prompt,
+        smollm2_instruct_prompt,
+        smollm2_assistant_prompt
 
 end

@@ -292,7 +292,7 @@ function create_mask(h::AbstractArray)
     T = eltype(h)
     mask .= T(-Inf)
     #mask = triu(mask, 1)
-    mask = tril(mask, -1)
+    mask = tril(mask, -1) #This is swapped because we're using the slightly more efficient dim setup
     return mask
 end
 

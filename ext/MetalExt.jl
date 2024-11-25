@@ -15,4 +15,13 @@ function NNlib.batched_mul(a::MtlArray, b::MtlArray)
     return reshape(res, a_shape[1], b_shape[2], a_shape[3:end]...)
 end
 
+function NNlib.PermutedDimsArray(a::MtlArray, perm)
+    return permutedims(a, perm)
+end
+
+function NNlib.batched_transpose(a::MtlArray)
+    dims = size(a)
+    return permutedims(a, (2,1,3:length(dims)...))
+end
+
 end
