@@ -1,59 +1,5 @@
 
-function argmax_sampler(logits::AbstractVector; device = identity)
-    return argmax(device(logits))
-end
 
-argmax_sampler(; device = identity) = logits -> argmax_sampler(logits; device = device)
-
-function top_pk_sampler(logits::AbstractVector; p = 0.5f0, k = 5, device = identity)
-    probs = device(Jjama3.softmax(logits))
-    perm = partialsortperm(probs, 1:k, rev=true)
-    sorted_probs = probs[perm]
-    cumsum_probs = cumsum(sorted_probs)
-    if cumsum_probs[1] > p
-        return perm[1]
-    else
-        cutoff = findlast(cumsum_probs .< p)
-        return sample(perm[1:cutoff], Weights(sorted_probs[1:cutoff]))
-    end
-end
-
-top_pk_sampler(;p = 0.5f0, k = 5, device = identity) = logits -> top_pk_sampler(logits; p, k, device)
-
-# https://arxiv.org/pdf/2411.07641
-function top_nσ_sampler(logits::AbstractVector{T}; temperature::T = 1.0f0, n::T = 1.0f0, device = identity) where T
-    scaled_logits = logits ./ temperature
-    M = maximum(scaled_logits)
-    σ = std(scaled_logits)
-    threshold = M - n * σ
-    mask = scaled_logits .>= threshold
-    masked_logits = copy(scaled_logits)
-    masked_logits[.!mask] .= -Inf
-    probs = device(Jjama3.softmax(masked_logits))
-    return sample(1:length(probs), Weights(probs))
-end
-
-top_nσ_sampler(; temperature = 1.0f0, n = 1.0f0, device = identity) = logits -> top_nσ_sampler(logits; temperature, n, device)
-
-#https://arxiv.org/pdf/2407.01082
-function min_p_sampler(logits::AbstractVector{T}; pbase::T = 0.5f0, device = identity) where T
-    probs = device(Jjama3.softmax(logits))
-    pmax = maximum(probs)
-    pscaled = pbase * pmax
-    mask = probs .>= pscaled
-    if !any(mask)
-        mask[argmax(probs)] = true
-    end
-    masked_probs = copy(probs)
-    masked_probs[.!mask] .= zero(T)
-    normalization = sum(masked_probs)
-    if normalization > 0
-        masked_probs ./= normalization
-    end
-    return sample(1:length(probs), Weights(masked_probs))
-end
-
-min_p_sampler(; pbase = 0.5f0, device = identity) = logits -> min_p_sampler(logits; pbase, device)
 
 # This generate function seems to do one unnecessary forward pass when switching from the forward pass over the initial sequence
 # to the sampling of each token. But when I try and fix it, the model gets slightly dumber.

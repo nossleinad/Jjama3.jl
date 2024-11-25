@@ -1,11 +1,16 @@
 module Jjama3
 
 using Flux, SafeTensors, Distributions, LinearAlgebra, StatsBase, NNlib
-import HuggingFaceTokenizers
+import HuggingFaceTokenizers, LogitSamplers
 
 tokenizer_from_repo = HuggingFaceTokenizers.from_pretrained
 tokenizer_from_file = HuggingFaceTokenizers.from_file
 Tokenizer = HuggingFaceTokenizers.Tokenizer
+
+top_pk_sampler = LogitSamplers.top_pk_sampler
+argmax_sampler = LogitSamplers.argmax_sampler
+min_p_sampler = LogitSamplers.min_p_sampler
+top_nσ_sampler = LogitSamplers.top_nσ_sampler
 
 include("model.jl")
 include("utils.jl")

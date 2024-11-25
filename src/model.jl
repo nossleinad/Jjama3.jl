@@ -192,10 +192,7 @@ function (attn::Attention)(x::AbstractArray{T}, start_pos::Int, freqs_cis, mask=
     p_output = permutedims(e_output, (2,3,1,4))  # (n_heads, head_dim, seqlen, batch)
     =#
     
-    scores = batched_mul(
-        batched_transpose(xk_for_attn),  
-        xq_for_attn                         
-    ) ./ sqrt(T(attn.head_dim))
+    scores = batched_mul(batched_transpose(xk_for_attn), xq_for_attn) ./ sqrt(T(attn.head_dim))
     if !isnothing(mask)
         scores = scores .+ mask
     end
