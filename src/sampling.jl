@@ -21,7 +21,7 @@ end
 top_pk_sampler(;p = 0.5f0, k = 5, device = identity) = logits -> top_pk_sampler(logits; p, k, device)
 
 # https://arxiv.org/pdf/2411.07641
-function top_n_sigma_sampler(logits::AbstractVector{T}; temperature::T = 1.0f0, n::T = 1.0f0, device = identity) where T
+function top_nσ_sampler(logits::AbstractVector{T}; temperature::T = 1.0f0, n::T = 1.0f0, device = identity) where T
     scaled_logits = logits ./ temperature
     M = maximum(scaled_logits)
     σ = std(scaled_logits)
@@ -33,7 +33,7 @@ function top_n_sigma_sampler(logits::AbstractVector{T}; temperature::T = 1.0f0, 
     return sample(1:length(probs), Weights(probs))
 end
 
-top_n_sigma_sampler(; temperature = 1.0f0, n = 1.0f0, device = identity) = logits -> top_n_sigma_sampler(logits; temperature, n, device)
+top_nσ_sampler(; temperature = 1.0f0, n = 1.0f0, device = identity) = logits -> top_nσ_sampler(logits; temperature, n, device)
 
 #https://arxiv.org/pdf/2407.01082
 function min_p_sampler(logits::AbstractVector{T}; pbase::T = 0.5f0, device = identity) where T
