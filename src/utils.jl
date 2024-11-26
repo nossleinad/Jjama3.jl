@@ -168,7 +168,7 @@ function load_llama3_from_safetensors(paths::Vector{String}, config; T = Float32
     return model
 end
 
-load_llama3_from_safetensors(path::String, config; T = Float32) = load_llama3_from_safetensors([path], config; T = T)
+load_llama3_from_safetensors(path::String, config; T = Float32, kwargs...) = load_llama3_from_safetensors([path], config; T = T, kwargs...)
 
 
 """
