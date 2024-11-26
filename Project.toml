@@ -10,12 +10,18 @@ Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
 HuggingFaceTokenizers = "a6888d44-1185-43bb-bd0f-7806f9976d18"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 LogitSamplers = "1b30fcfc-0ee9-4be2-9cfe-b2289b43e041"
+LowRankLayers = "b66182ab-a85c-43b0-99bd-d85cc47c5e50"
 NNlib = "872c559c-99b0-510c-b3b7-b6c96a88d5cd"
 SafeTensors = "eeda0dda-7046-4914-a807-2495fc7abb89"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 
 [weakdeps]
 Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
+
+[sources]
+HuggingFaceTokenizers = {rev = "main", url = "https://github.com/MurrellGroup/HuggingFaceTokenizers.jl"}
+LogitSamplers = {rev = "main", url = "https://github.com/MurrellGroup/LogitSamplers.jl"}
+LowRankLayers = {rev = "main", url = "https://github.com/MurrellGroup/LowRankLayers.jl"}
 
 [extensions]
 MetalExt = "Metal"
@@ -24,6 +30,7 @@ MetalExt = "Metal"
 BytePairEncoding = "0.5"
 Distributions = "0.25"
 Flux = "0.14"
+LowRankLayers = "1.0.0"
 NNlib = "0.9"
 SafeTensors = "1"
 StatsBase = "0.34"
@@ -31,10 +38,6 @@ julia = "1.9"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
-
-[sources]
-HuggingFaceTokenizers = {url = "https://github.com/MurrellGroup/HuggingFaceTokenizers.jl", rev = "main"}
-LogitSamplers = {url = "https://github.com/MurrellGroup/LogitSamplers.jl", rev = "main"}
 
 [targets]
 test = ["Test"]
