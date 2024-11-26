@@ -1,5 +1,5 @@
-encode(tkn::Tokenizer, str) = HuggingFaceTokenizers.encode(tkn, str).ids .+ 1
-decode(tkn::Tokenizer, ids) = HuggingFaceTokenizers.decode(tkn, ids .- 1)
+encode(tkn::Tokenizer, str; kwargs...) = HuggingFaceTokenizers.encode(tkn, str; kwargs...).ids .+ 1
+decode(tkn::Tokenizer, ids; kwargs...) = HuggingFaceTokenizers.decode(tkn, ids .- 1; kwargs...)
 
 
 #https://www.llama.com/docs/model-cards-and-prompt-formats/llama3_2/
@@ -23,13 +23,11 @@ Format a prompt for use with Llama3.2's instruction format, with a simple "You a
 llama3_assistant_prompt(tokenizer, prompt) = llama3_instruct_prompt(tokenizer,"\nYou are a helpful assistant\n", prompt);
 
 function smollm2_instruct_prompt(tokenizer, system_prompt, user_prompt)
-    str = """<|im_start|>system\n$(system_prompt)<|im_end|>\n<|im_start|>user\n$(user_prompt)<|im_end|>\n"""
+    str = """<|im_start|>system\n$(system_prompt)<|im_end|>\n<|im_start|>user\n$(user_prompt)<|im_end|>\n<|im_start|>assistant\n"""
     return encode(tokenizer, str)
 end
 
 smollm2_assistant_prompt(tokenizer, prompt) = smollm2_instruct_prompt(tokenizer, "You are a helpful AI assistant named SmolLM, trained by Hugging Face", prompt);
-
-
 
 """
     model = load_llama3_from_safetensors(model_weight_paths, config)
@@ -43,7 +41,7 @@ so if you're loading weights from a different source, you might get very poor mo
     model_weight_paths = ["Llama3_2_1B_instruct/model.safetensors"] #Can be an array of paths if the model is split across multiple files
     model = load_llama3_from_safetensors(model_weight_paths, config)
 """
-function load_llama3_from_safetensors(paths::Vector{String}, config; T = Float32)
+function load_llama3_from_safetensors(paths::Vector{String}, config; T = Float32, add_lora_to = Symbol[], lora_dim = 0)
     config = Dict(config) #Just in case the user passed eg. a JSON3.Object
     #@assert config[:rope_scaling][:rope_type] == "llama3"
     #@assert config[:rope_scaling][:low_freq_factor] == 1
@@ -128,9 +126,92 @@ function load_llama3_from_safetensors(paths::Vector{String}, config; T = Float32
         weights = nothing
         GC.gc()
     end
-    
+
+    if !isempty(add_lora_to)
+        #Then load in the current layers:
+        if :Q in add_lora_to
+            for layer in model.layers
+                layer.attention.wq = LoRADense(layer.attention.wq, lora_dim)
+            end
+        end
+        if :K in add_lora_to
+            for layer in model.layers
+                layer.attention.wk = LoRADense(layer.attention.wk, lora_dim)
+            end
+        end
+        if :V in add_lora_to
+            for layer in model.layers
+                layer.attention.wv = LoRADense(layer.attention.wv, lora_dim)
+            end
+        end
+        if :O in add_lora_to
+            for layer in model.layers
+                layer.attention.wo = LoRADense(layer.attention.wo, lora_dim)
+            end
+        end
+        if :w1 in add_lora_to
+            for layer in model.layers
+                layer.feed_forward.w1 = LoRADense(layer.feed_forward.w1, lora_dim)
+            end
+        end
+        if :w2 in add_lora_to
+            for layer in model.layers
+                layer.feed_forward.w2 = LoRADense(layer.feed_forward.w2, lora_dim)
+            end
+        end
+        if :w3 in add_lora_to
+            for layer in model.layers
+                layer.feed_forward.w3 = LoRADense(layer.feed_forward.w3, lora_dim)
+            end
+        end
+    end
     return model
 end
 
 load_llama3_from_safetensors(path::String, config; T = Float32) = load_llama3_from_safetensors([path], config; T = T)
 
+
+"""
+    sampler = structured_choice(choices, vocab::Vector{String}, end_token::Int; sampler = logits -> argmax_sampler(logits))
+
+Return a function that can be passed into generate as a sampler, which will sample from the given choices. Handles the case where the choices are made up of multiple tokens.
+`vocab` is an array of the tokens as strings, in their order in the tokenizer. `sampler` is a function that takes the logits (here including those masked with -Inf) and returns a sample from them. Defaults to argmax.
+
+Example:
+```julia
+config = JSON3.read(read("SmolLM2-1.7B-Instruct/config.json", String))
+model = load_llama3_from_safetensors("SmolLM2-1.7B-Instruct/model.safetensors", config)
+tkn = tokenizer_from_file(Tokenizer, "SmolLM2-1.7B-Instruct/tokenizer.json")
+
+question = "In a Bayesian model, what do we call the probability distribution of parameters given the data?"
+choices = ["Prior", "Likelihood", "Marginal Likelihood", "Evidence", "Posterior"]
+
+vocab = [decode(tkn, [i], skip_special_tokens = false) for i in 1:49152]
+eos = encode(tkn, "<|im_end|>")[end]
+prompt = smollm2_instruct_prompt(tkn, "You are an expert in Statistics and Probability Theory who answers questions in as few words as possible.",question)
+generate(model, prompt, max_new_tokens=100, tokenizer_for_printing=tkn, end_token = eos, sampler = structured_choice(choices, vocab, eos));
+```
+"""
+function structured_choice(choices::Vector{String}, vocab::Vector{String}, end_token::Int; sampler = logits -> argmax_sampler(logits), device = identity)
+    remaining_choices = copy(choices)
+    function choice_sampler(logits)
+        logits = device(logits)
+        if length(remaining_choices) == 0 || maximum(length.(remaining_choices)) == 0
+            return end_token
+        end
+        mask = zeros(Bool, length(vocab))
+        for i in 1:length(vocab)
+            for choice in remaining_choices
+                if startswith(choice, vocab[i])
+                    mask[i] = true
+                end
+            end
+        end
+        logits[.!mask] .= -Inf
+        next_token = sampler(logits)
+        next_token_str = vocab[next_token]
+        remaining_choices = [choice[length(next_token_str)+1:end] for choice in remaining_choices if startswith(choice, next_token_str)]
+        return next_token
+    end
+    return choice_sampler
+end

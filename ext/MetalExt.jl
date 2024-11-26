@@ -3,7 +3,7 @@ module MetalExt
 #Note: Metal speeds things up a little for forward_inference and forward_loss calls, but is VERY slow for sampling.
 #It seems that each single Metal call has some constant overhead that kills it.
 
-using Metal, Jjama3.NNlib
+using Metal, NNlib
 
 function NNlib.batched_mul(a::MtlArray, b::MtlArray)
     a_shape = size(a)

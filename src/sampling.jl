@@ -1,6 +1,3 @@
-
-
-
 # This generate function seems to do one unnecessary forward pass when switching from the forward pass over the initial sequence
 # to the sampling of each token. But when I try and fix it, the model gets slightly dumber.
 # Vibes feel like a shift-by-1 in the RoPE, or something similar. Need to investigate when I find time.
