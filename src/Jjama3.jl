@@ -5,14 +5,14 @@ using LogitSamplers, LowRankLayers
 import HuggingFaceTokenizers
 
 
-tokenizer_from_repo = HuggingFaceTokenizers.from_pretrained
-tokenizer_from_file = HuggingFaceTokenizers.from_file
-Tokenizer = HuggingFaceTokenizers.Tokenizer
+const tokenizer_from_repo = HuggingFaceTokenizers.from_pretrained
+const tokenizer_from_file = HuggingFaceTokenizers.from_file
+const Tokenizer = HuggingFaceTokenizers.Tokenizer
 
-top_pk_sampler = LogitSamplers.top_pk_sampler
-argmax_sampler = LogitSamplers.argmax_sampler
-min_p_sampler = LogitSamplers.min_p_sampler
-top_nσ_sampler = LogitSamplers.top_nσ_sampler
+const top_pk_sampler = LogitSamplers.top_pk_sampler
+const argmax_sampler = LogitSamplers.argmax_sampler
+const min_p_sampler = LogitSamplers.min_p_sampler
+const top_nσ_sampler = LogitSamplers.top_nσ_sampler
 
 
 
