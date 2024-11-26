@@ -36,11 +36,12 @@ generate(model, prompt,
 
 ## Capability
 
-- Seems to generate reasonable text from Llama3.1 and Llama3.2 models, loaded from Huggingface safetensors.
-- Sampling accelerated with KV caching, with argmax and top-p sampling supported.
-- Gradients seem to work on CPU, using Flux and Zygote. Untested on GPU.
-- Sampling (and forward passes) work with CUDA, where everything is much faster. Gradients untested.
-- Metal acceleration for forward_inference and forward_loss. Gradients untested. Sampling works, but is slower with Metal than with CPU.
+- Works with Llama3.1 and Llama3.2 models (also including SmolLM2), loaded from Huggingface safetensors.
+- Sampling accelerated with KV caching.
+- RoPE scaling (for exceeding the model's max training-time context length) is implemented, but likely incorrect with KV cache. Be careful if you're using with really long sequences.
+- Imported models are trainable (with Flux), including with low-rank (ie. LoRA) finetuning.
+- Sampling, training, etc compatible with CUDA, where everything is much faster.
+- Metal acceleration for forward_inference, forward_loss, and sampling. Gradients (with Zygote) fail. Sampling works, but is slower with Metal than with CPU.
 
 
 ## Samplers
@@ -134,3 +135,49 @@ generate(model, prompt,
         sampler = top_nσ_sampler());
 ```
 
+## CUDA GPU
+
+```julia
+using CUDA, Flux, JSON3, Jjama3
+```
+
+For sampling, you can pass `device = gpu` to the `generate` function:
+
+```julia
+#Put the model on the GPU
+model = gpu(model)
+
+prompt = smollm2_assistant_prompt(tkn,"Tell me the two worst things about Python.")
+generate(model, prompt,
+        max_new_tokens=500,
+        tokenizer_for_printing=tkn,
+        end_token = encode(tkn, "<|im_end|>")[end],
+        device = gpu); #Note the device keyword
+```
+
+If you're using one of the trickier samplers, some CPU operations are needed for sampling. So you need to pass `device = cpu` to the sampler, while passing `device = gpu` to the `generate` function:
+
+```julia
+#Put the model on the GPU
+model = gpu(model)
+
+prompt = smollm2_assistant_prompt(tkn,"Tell me the two worst things about Python.")
+generate(model, prompt,
+        max_new_tokens=500,
+        tokenizer_for_printing=tkn,
+        end_token = encode(tkn, "<|im_end|>")[end],
+        sampler = top_nσ_sampler(; device = cpu), #cpu for the sampler
+        device = gpu, #gpu for generate
+        ); 
+```
+
+And if you're training, the data needs to be on the GPU:
+
+```julia
+model = gpu(model)
+
+train_toks = encode(tkn, "This is a test.")
+gpu_train_toks = gpu(train_toks)
+
+forward_loss(model, gpu_train_toks[1:end-1,:], gpu_train_toks[2:end,:])
+```
