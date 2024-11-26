@@ -1,65 +1,33 @@
-"""
-    tkn = llama3_tokenizer()
+encode(tkn::Tokenizer, str; kwargs...) = HuggingFaceTokenizers.encode(tkn, str; kwargs...).ids .+ 1
+decode(tkn::Tokenizer, ids; kwargs...) = HuggingFaceTokenizers.decode(tkn, ids .- 1; kwargs...)
 
-Load the tokenizer for Llama3. This seems to work, but I have not checked if there are some different edge-cases, or missing tokens relative to the original tokenizer (besides the special tokens we hackily include).
 
-    tkn = llama3_tokenizer()
-    tkn.encode("What is the capital of France?")
-    tkn.decode([10, 2, 5, 99])
-"""
-llama3_tokenizer() = BytePairEncoding.load_tiktoken_encoder("cl100k_base")
+#https://www.llama.com/docs/model-cards-and-prompt-formats/llama3_2/
+function llama3_instruct_prompt(tokenizer,system_prompt, user_prompt)
+    str = """<|start_header_id|>system<|end_header_id|>
+$system_prompt
+<|eot_id|><|start_header_id|>user<|end_header_id|>
+
+$(user_prompt)<|eot_id|><|start_header_id|>assistant<|end_header_id|>"""
+    return encode(tokenizer, str)
+end
 
 """
     generate(model, prompt, max_new_tokens=100, encoder_for_printing=tkn)
 
 Format a prompt for use with Llama3.2's instruction format, with a simple "You are a helpful assistant" system prompt.
 
-    tkn = llama3_tokenizer()
-    prompt = assistant_prompt("What is the capital of France?", tkn)
+    prompt = assistant_prompt(tkn, "What is the capital of France?")
     generate(model, prompt, max_new_tokens=100, encoder_for_printing=tkn)
 """
-assistant_prompt(prompt, tkn) = format_llama32_instruction_prompt("\nYou are a helpful assistant\n", prompt, tkn);
+llama3_assistant_prompt(tokenizer, prompt) = llama3_instruct_prompt(tokenizer,"\nYou are a helpful assistant\n", prompt);
 
-
-#https://www.llama.com/docs/model-cards-and-prompt-formats/llama3_2/
-"""
-    generate(model, prompt, max_new_tokens=100, encoder_for_printing=tkn)
-
-Format a prompt for use with Llama3.2's instruction format, injecting the system and user roles.
-
-    tkn = llama3_tokenizer()
-    prompt = format_llama32_instruction_prompt("\\nYou are a helpful assistant\\n", "What is the capital of France?", tkn)
-    generate(model, prompt, max_new_tokens=100, encoder_for_printing=tkn)
-"""
-function format_llama32_instruction_prompt(sys_prompt, user_prompt, tokenizer) 
-    prompt = [128001, 128007] #begin_of_text, start_header_id
-    prompt = vcat(prompt, tokenizer.encode("system"))
-    push!(prompt, 128008) #end_header_id
-    prompt = vcat(prompt, tokenizer.encode(sys_prompt))
-    prompt = vcat(prompt, [128010, 128007]) #eot_id, start_header_id
-    prompt = vcat(prompt, tokenizer.encode("user"))
-    push!(prompt, 128008) #end_header_id
-    prompt = vcat(prompt, tokenizer.encode("\n"))
-    prompt = vcat(prompt, tokenizer.encode(user_prompt))
-    prompt = vcat(prompt, [128010, 128007]) #eot_id, start_header_id
-    prompt = vcat(prompt, tokenizer.encode("assistant"))
-    push!(prompt, 128008) #end_header_id
-    return prompt
+function smollm2_instruct_prompt(tokenizer, system_prompt, user_prompt)
+    str = """<|im_start|>system\n$(system_prompt)<|im_end|>\n<|im_start|>user\n$(user_prompt)<|im_end|>\n<|im_start|>assistant\n"""
+    return encode(tokenizer, str)
 end
 
-#These have already been incremented by 1 to account for Julia's 1-indexing
-special_tokens = Dict(
-    "<|begin_of_text|>" => 128001,
-    "<|end_of_text|>" => 128002,
-    "<|start_header_id|>" => 128007,
-    "<|end_header_id|>" => 128008,
-    "<|eot_id|>" => 128010,
-    "<|finetune_right_pad_id|>" => 128005,
-    "<|python_tag|>" => 128011
-)
-
-#[ "<|start_header_id|>user<|end_header_id|>\n\nGiven the following question and four candidate answers (A, B, C and D), choose the best answer.\nQuestion: An astronomer observes that a planet rotates faster after a meteorite impact. Which is the most likely effect of this increase in rotation?\nA. Planetary density will decrease.\nB. Planetary years will become longer.\nC. Planetary days will become shorter.\nD. Planetary gravity will become stronger.\nYour response should end with \"The best answer is [the_answer_letter]\" where the [the_answer_letter] is one of A, B, C or D.<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\nThe best answer is" ]
-
+smollm2_assistant_prompt(tokenizer, prompt) = smollm2_instruct_prompt(tokenizer, "You are a helpful AI assistant named SmolLM, trained by Hugging Face", prompt);
 
 """
     model = load_llama3_from_safetensors(model_weight_paths, config)
@@ -73,14 +41,20 @@ so if you're loading weights from a different source, you might get very poor mo
     model_weight_paths = ["Llama3_2_1B_instruct/model.safetensors"] #Can be an array of paths if the model is split across multiple files
     model = load_llama3_from_safetensors(model_weight_paths, config)
 """
-function load_llama3_from_safetensors(paths::Vector{String}, config; T = Float32)
+function load_llama3_from_safetensors(paths::Vector{String}, config; T = Float32, add_lora_to = Symbol[], lora_dim = 0)
     config = Dict(config) #Just in case the user passed eg. a JSON3.Object
-    @assert config[:rope_scaling][:rope_type] == "llama3"
-    @assert config[:rope_scaling][:low_freq_factor] == 1
-    @assert config[:rope_scaling][:high_freq_factor] == 4
-    @assert config[:rope_scaling][:original_max_position_embeddings] == 8192
+    #@assert config[:rope_scaling][:rope_type] == "llama3"
+    #@assert config[:rope_scaling][:low_freq_factor] == 1
+    #@assert config[:rope_scaling][:high_freq_factor] == 4
+    #@assert config[:rope_scaling][:original_max_position_embeddings] == 8192
 
     # Create model with config parameters from the JSON
+    scale_factor = 1f0
+    if haskey(config, :rope_scaling)
+        if !isnothing(config[:rope_scaling])
+            scale_factor = config[:rope_scaling][:factor]
+        end
+    end
     model = Transformer(
         config[:vocab_size],                        # vocab_size
         config[:hidden_size],                       # dim (hidden_size)
@@ -92,7 +66,7 @@ function load_llama3_from_safetensors(paths::Vector{String}, config; T = Float32
         norm_eps=T(config[:rms_norm_eps]),          # rms_norm_eps
         rope_theta=T(config[:rope_theta]),          # rope_theta
         use_scaled_rope=true,                       # Using scaled RoPE based on the config
-        scale_factor=config[:rope_scaling][:factor] # scale_factor
+        scale_factor=scale_factor                   # scale_factor
     )
     
     for path in paths # Process one file at a time
@@ -152,9 +126,92 @@ function load_llama3_from_safetensors(paths::Vector{String}, config; T = Float32
         weights = nothing
         GC.gc()
     end
-    
+
+    if !isempty(add_lora_to)
+        #Then load in the current layers:
+        if :Q in add_lora_to
+            for layer in model.layers
+                layer.attention.wq = LoRADense(layer.attention.wq, lora_dim)
+            end
+        end
+        if :K in add_lora_to
+            for layer in model.layers
+                layer.attention.wk = LoRADense(layer.attention.wk, lora_dim)
+            end
+        end
+        if :V in add_lora_to
+            for layer in model.layers
+                layer.attention.wv = LoRADense(layer.attention.wv, lora_dim)
+            end
+        end
+        if :O in add_lora_to
+            for layer in model.layers
+                layer.attention.wo = LoRADense(layer.attention.wo, lora_dim)
+            end
+        end
+        if :w1 in add_lora_to
+            for layer in model.layers
+                layer.feed_forward.w1 = LoRADense(layer.feed_forward.w1, lora_dim)
+            end
+        end
+        if :w2 in add_lora_to
+            for layer in model.layers
+                layer.feed_forward.w2 = LoRADense(layer.feed_forward.w2, lora_dim)
+            end
+        end
+        if :w3 in add_lora_to
+            for layer in model.layers
+                layer.feed_forward.w3 = LoRADense(layer.feed_forward.w3, lora_dim)
+            end
+        end
+    end
     return model
 end
 
-load_llama3_from_safetensors(path::String, config; T = Float32) = load_llama3_from_safetensors([path], config; T = T)
+load_llama3_from_safetensors(path::String, config; T = Float32, kwargs...) = load_llama3_from_safetensors([path], config; T = T, kwargs...)
 
+
+"""
+    sampler = structured_choice(choices, vocab::Vector{String}, end_token::Int; sampler = logits -> argmax_sampler(logits))
+
+Return a function that can be passed into generate as a sampler, which will sample from the given choices. Handles the case where the choices are made up of multiple tokens.
+`vocab` is an array of the tokens as strings, in their order in the tokenizer. `sampler` is a function that takes the logits (here including those masked with -Inf) and returns a sample from them. Defaults to argmax.
+
+Example:
+```julia
+config = JSON3.read(read("SmolLM2-1.7B-Instruct/config.json", String))
+model = load_llama3_from_safetensors("SmolLM2-1.7B-Instruct/model.safetensors", config)
+tkn = tokenizer_from_file(Tokenizer, "SmolLM2-1.7B-Instruct/tokenizer.json")
+
+question = "In a Bayesian model, what do we call the probability distribution of parameters given the data?"
+choices = ["Prior", "Likelihood", "Marginal Likelihood", "Evidence", "Posterior"]
+
+vocab = [decode(tkn, [i], skip_special_tokens = false) for i in 1:49152]
+eos = encode(tkn, "<|im_end|>")[end]
+prompt = smollm2_instruct_prompt(tkn, "You are an expert in Statistics and Probability Theory who answers questions in as few words as possible.",question)
+generate(model, prompt, max_new_tokens=100, tokenizer_for_printing=tkn, end_token = eos, sampler = structured_choice(choices, vocab, eos));
+```
+"""
+function structured_choice(choices::Vector{String}, vocab::Vector{String}, end_token::Int; sampler = logits -> argmax_sampler(logits), device = identity)
+    remaining_choices = copy(choices)
+    function choice_sampler(logits)
+        logits = device(logits)
+        if length(remaining_choices) == 0 || maximum(length.(remaining_choices)) == 0
+            return end_token
+        end
+        mask = zeros(Bool, length(vocab))
+        for i in 1:length(vocab)
+            for choice in remaining_choices
+                if startswith(choice, vocab[i])
+                    mask[i] = true
+                end
+            end
+        end
+        logits[.!mask] .= -Inf
+        next_token = sampler(logits)
+        next_token_str = vocab[next_token]
+        remaining_choices = [choice[length(next_token_str)+1:end] for choice in remaining_choices if startswith(choice, next_token_str)]
+        return next_token
+    end
+    return choice_sampler
+end

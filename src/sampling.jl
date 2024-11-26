@@ -1,42 +1,20 @@
-
-function argmax_sampler(logits::AbstractVector; device = identity)
-    return argmax(device(logits))
-end
-
-argmax_sampler(; device = identity) = logits -> argmax_sampler(logits; device = device)
-
-function top_pk_sampler(logits::AbstractVector; p = 0.5f0, k = 5, device = identity)
-    probs = device(Jjama3.softmax(logits))
-    perm = partialsortperm(probs, 1:k, rev=true)
-    sorted_probs = probs[perm]
-    cumsum_probs = cumsum(sorted_probs)
-    if cumsum_probs[1] > p
-        return perm[1]
-    else
-        cutoff = findlast(cumsum_probs .< p)
-        return sample(perm[1:cutoff], Weights(sorted_probs[1:cutoff]))
-    end
-end
-
-top_pk_sampler(;p = 0.5f0, k = 5, device = identity) = logits -> top_pk_sampler(logits; p, k, device)
-
 # This generate function seems to do one unnecessary forward pass when switching from the forward pass over the initial sequence
 # to the sampling of each token. But when I try and fix it, the model gets slightly dumber.
 # Vibes feel like a shift-by-1 in the RoPE, or something similar. Need to investigate when I find time.
 """
-    generate(model, initial_tokens; max_new_tokens=100, sampler=top_pk_sampler(p=0.5f0, k=5), encoder_for_printing=tkn, end_token=128010)
+    generate(model, initial_tokens; max_new_tokens=100, sampler=top_pk_sampler(p=0.5f0, k=5), tokenizer_for_printing=tkn, end_token=128010)
     
 Takes an initial sequence of tokens, and generates new tokens one at a time until the end token is sampled. Uses a KV cache. No batch dim for now.
 Runs on CPU by default. If the model is on the GPU (assuming Flux.jl, eg. `model = gpu(model)`), then pass `device = gpu` to `generate` to run on the GPU.
 
     tkn = llama3_tokenizer()
-    generate(model, initial_tokens; max_new_tokens=100, sampler=top_pk_sampler(p=0.5f0, k=5), encoder_for_printing=tkn, end_token=128010)
+    generate(model, initial_tokens; max_new_tokens=100, sampler=top_pk_sampler(p=0.5f0, k=5), tokenizer_for_printing=tkn, end_token=128010)
 """
 function generate(model::Transformer{T}, 
                  initial_tokens::AbstractArray{IntT};
                  max_new_tokens=100,
                  sampler::Function=argmax_sampler,
-                 encoder_for_printing = nothing,
+                 tokenizer_for_printing = nothing,
                  end_token = 128010,
                  device = identity) where {T, IntT}
     
@@ -77,8 +55,8 @@ function generate(model::Transformer{T},
         next_token = sampler(logits[:, end, 1])
         current_len += 1
         tokens[current_len] = next_token
-        if !isnothing(encoder_for_printing)
-            print(encoder_for_printing.decode([next_token]))
+        if !isnothing(tokenizer_for_printing)
+            print(decode(tokenizer_for_printing, [next_token]))
         end
         if next_token == end_token
             break
