@@ -155,22 +155,6 @@ generate(model, prompt,
         device = gpu); #Note the device keyword
 ```
 
-If you're using one of the trickier samplers, some CPU operations are needed for sampling. So you need to pass `device = cpu` to the sampler, while passing `device = gpu` to the `generate` function:
-
-```julia
-#Put the model on the GPU
-model = gpu(model)
-
-prompt = smollm2_assistant_prompt(tkn,"Tell me the two worst things about Python.")
-generate(model, prompt,
-        max_new_tokens=500,
-        tokenizer_for_printing=tkn,
-        end_token = encode(tkn, "<|im_end|>")[end],
-        sampler = top_nσ_sampler(; device = cpu), #cpu for the sampler
-        device = gpu, #gpu for generate
-        ); 
-```
-
 And if you're training, the data needs to be on the GPU:
 
 ```julia

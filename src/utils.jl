@@ -191,6 +191,8 @@ eos = encode(tkn, "<|im_end|>")[end]
 prompt = smollm2_instruct_prompt(tkn, "You are an expert in Statistics and Probability Theory who answers questions in as few words as possible.",question)
 generate(model, prompt, max_new_tokens=100, tokenizer_for_printing=tkn, end_token = eos, sampler = structured_choice(choices, vocab, eos));
 ```
+
+If you want to run the model on the GPU, then you need to pass `device = gpu` to the `generate` function, and `device = cpu` to the `structured_choice` function.
 """
 function structured_choice(choices::Vector{String}, vocab::Vector{String}, end_token::Int; sampler = logits -> argmax_sampler(logits), device = identity)
     remaining_choices = copy(choices)
