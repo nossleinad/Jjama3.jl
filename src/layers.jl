@@ -57,13 +57,13 @@ mutable struct Attention
     cache::Union{Nothing, KVCache}
 end
 
-function Attention(dim::Int, n_heads::Int, n_kv_heads=n_heads)
+function Attention(dim::Int, n_heads::Int, n_kv_heads=n_heads; qkv_bias=false)
     head_dim = dim ÷ n_heads
     n_rep = n_heads ÷ n_kv_heads
     Attention(
-        Dense(dim => n_heads * head_dim, bias=false),
-        Dense(dim => n_kv_heads * head_dim, bias=false),
-        Dense(dim => n_kv_heads * head_dim, bias=false),
+        Dense(dim => n_heads * head_dim, bias=qkv_bias),
+        Dense(dim => n_kv_heads * head_dim, bias=qkv_bias),
+        Dense(dim => n_kv_heads * head_dim, bias=qkv_bias),
         Dense(n_heads * head_dim => dim, bias=false),
         n_heads,
         n_kv_heads,
@@ -146,9 +146,9 @@ struct TransformerBlock
 end
 
 function TransformerBlock(dim::Int, n_heads::Int, n_kv_heads::Int=n_heads, ff_hidden_dim = 4 * dim;
-                         norm_eps=1f-5)
+                         norm_eps=1f-5, qkv_bias=false)
     TransformerBlock(
-        Attention(dim, n_heads, n_kv_heads),
+        Attention(dim, n_heads, n_kv_heads; qkv_bias),
         FeedForward(dim, ff_hidden_dim),
         RMSNorm(dim, eps=norm_eps),
         RMSNorm(dim, eps=norm_eps)
@@ -174,12 +174,13 @@ end
 function Transformer(vocab_size::Int, dim::Int, n_layers::Int, n_heads::Int, 
                     n_kv_heads::Int, max_seq_len::Int, ff_hidden_dim::Int;
                     norm_eps::T=1f-5,
+                    qkv_bias=false,
                     rope_theta::T=500000f0,
                     use_scaled_rope=false,
                     scale_factor=8) where T
     
     tok_embeddings = Flux.Embedding(vocab_size => dim)
-    layers = [TransformerBlock(dim, n_heads, n_kv_heads, ff_hidden_dim; norm_eps=norm_eps) for _ in 1:n_layers]
+    layers = [TransformerBlock(dim, n_heads, n_kv_heads, ff_hidden_dim; norm_eps=norm_eps, qkv_bias=qkv_bias) for _ in 1:n_layers]
     norm = RMSNorm(dim, eps=norm_eps)
     output = Dense(dim => vocab_size, bias=false)
     freqs_cis = precompute_freqs_cis(

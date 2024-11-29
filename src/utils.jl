@@ -55,6 +55,11 @@ function load_llama3_from_safetensors(paths::Vector{String}, config; T = Float32
             scale_factor = config[:rope_scaling][:factor]
         end
     end
+    if config[:model_type] == "qwen2"
+        qkv_bias = true
+    else
+        qkv_bias = false
+    end
     model = Transformer(
         config[:vocab_size],                        # vocab_size
         config[:hidden_size],                       # dim (hidden_size)
@@ -63,6 +68,7 @@ function load_llama3_from_safetensors(paths::Vector{String}, config; T = Float32
         config[:num_key_value_heads],               # n_kv_heads (num_key_value_heads)
         config[:max_position_embeddings],           # max_seq_len (max_position_embeddings)
         config[:intermediate_size],                 # ff_hidden_dim
+        qkv_bias = qkv_bias,                        # qkv_bias
         norm_eps=T(config[:rms_norm_eps]),          # rms_norm_eps
         rope_theta=T(config[:rope_theta]),          # rope_theta
         use_scaled_rope=true,                       # Using scaled RoPE based on the config
@@ -103,6 +109,16 @@ function load_llama3_from_safetensors(paths::Vector{String}, config; T = Float32
             end
             if haskey(weights, "$prefix.self_attn.o_proj.weight")
                 layer.attention.wo.weight .= weights["$prefix.self_attn.o_proj.weight"]
+            end
+
+            if haskey(weights, "$prefix.self_attn.q_proj.bias")
+                layer.attention.wq.bias .= weights["$prefix.self_attn.q_proj.bias"]
+            end
+            if haskey(weights, "$prefix.self_attn.k_proj.bias")
+                layer.attention.wk.bias .= weights["$prefix.self_attn.k_proj.bias"]
+            end
+            if haskey(weights, "$prefix.self_attn.v_proj.bias")
+                layer.attention.wv.bias .= weights["$prefix.self_attn.v_proj.bias"]
             end
             
             if haskey(weights, "$prefix.mlp.gate_proj.weight")
