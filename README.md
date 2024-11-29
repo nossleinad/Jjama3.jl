@@ -6,7 +6,7 @@
 
 ## Latest
 
-- Now with support for the Qwen 2.5 (eg. [base](https://huggingface.co/collections/Qwen/qwen25-66e81a666513e518adb90d9e), [Qwen2.5-Coder](https://huggingface.co/collections/Qwen/qwen25-coder-66eaa22e6f99801bf65b0c2f), amd [Qwen2.5-Math](https://huggingface.co/collections/Qwen/qwen25-math-66eaa240a1b7d5ee65f1da3e)).
+- Now with support for Qwen 2.5 (eg. [base](https://huggingface.co/collections/Qwen/qwen25-66e81a666513e518adb90d9e), [Qwen2.5-Coder](https://huggingface.co/collections/Qwen/qwen25-coder-66eaa22e6f99801bf65b0c2f), and [Qwen2.5-Math](https://huggingface.co/collections/Qwen/qwen25-math-66eaa240a1b7d5ee65f1da3e)).
 
 ## Installation
 
@@ -14,10 +14,10 @@
 We've split this into a few (unregistered) packages, so you'll need to add them all, and you need JSON3 for loading the configs:
 ```
 ] add JSON3
-] add https://github.com/MurrellGroup/HuggingFaceTokenizers.jl
-] add https://github.com/MurrellGroup/LowRankLayers.jl
-] add https://github.com/MurrellGroup/LogitSamplers.jl
-] add https://github.com/MurrellGroup/Jjama3.jl
+  add https://github.com/MurrellGroup/HuggingFaceTokenizers.jl
+  add https://github.com/MurrellGroup/LowRankLayers.jl
+  add https://github.com/MurrellGroup/LogitSamplers.jl
+  add https://github.com/MurrellGroup/Jjama3.jl
 ```
 
 ## Quickstart
