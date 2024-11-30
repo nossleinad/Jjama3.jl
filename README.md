@@ -147,7 +147,7 @@ In addition to `JSON3` and `Jjama3`, ensure `CUDA.jl` and `Flux.jl` are installe
 using CUDA, Flux, JSON3, Jjama3
 ```
 
-You might also need to install `cuDNN.jl` and run `using cuDNN` on some systems.
+You might also need to install `cuDNN` and run `using cuDNN` on some systems.
 
 For sampling, you can pass `device = gpu` to the `generate` function:
 
