@@ -25,7 +25,6 @@ clear!(cache::KVCache) = config!(cache, seq_length=0)
 
 function update!(cache::KVCache, start_pos::Int, xk::AbstractArray, xv::AbstractArray)
     if iszero(seq_length(cache))
-        println("fuck")
         return xk, xv
     else
         seqlen = size(xk, 2)
