@@ -155,7 +155,7 @@ function (attn::Attention)(x::AbstractArray{T}, start_pos::Integer, rope=nothing
     xv_for_attn = reshape(xv, attn.head_dim, :, attn.n_heads * batch)
 
     scores = batched_mul(batched_transpose(xk_for_attn), xq_for_attn) / sqrt(T(attn.head_dim))
-    scores .+= mask
+    scores = scores .+ mask
     sm_scores = softmax(scores; dims=1)
 
     output = batched_mul(xv_for_attn, sm_scores)

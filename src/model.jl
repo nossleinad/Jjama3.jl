@@ -1,12 +1,13 @@
 #Note about output layer being tied to embedding: https://github.com/meta-llama/llama-models/issues/172
 
 function create_mask(h::AbstractArray{T}) where T<:AbstractFloat
-    dim, seqlen, batch = size(h)
-    mask = similar(h, seqlen, seqlen)
-    mask .= T(-Inf)
-    #mask = triu(mask, 1)
-    mask = tril(mask, -1) #This is swapped because we're using the slightly more efficient dim setup
-    return mask
+    Flux.Zygote.ignore() do
+        dim, seqlen, batch = size(h)
+        mask = similar(h, seqlen, seqlen)
+        mask .= T(-Inf)
+        mask = tril(mask, -1) #This is swapped because we're using the slightly more efficient dim setup
+        return mask
+    end
 end
 
 function (model::Transformer)(tokens::AbstractArray{Int}, start_pos::Int=0)
