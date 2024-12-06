@@ -1,11 +1,16 @@
 #Note about output layer being tied to embedding: https://github.com/meta-llama/llama-models/issues/172
 
-function create_mask(h::AbstractArray{T}) where T<:AbstractFloat
+function create_mask(h::AbstractArray{T}; precached_size = 0) where T<:AbstractFloat
     Flux.Zygote.ignore() do
         dim, seqlen, batch = size(h)
         mask = similar(h, seqlen, seqlen)
         mask .= T(-Inf)
         mask = tril(mask, -1) #This is swapped because we're using the slightly more efficient dim setup
+        if precached_size > 0
+            pad = similar(h, precached_size, seqlen)
+            pad .= T(0.0)
+            mask = vcat(pad, mask)
+        end
         return mask
     end
 end
@@ -13,7 +18,11 @@ end
 function (model::Transformer)(tokens::AbstractArray{Int}, start_pos::Int=0)
     h = model.tok_embeddings(tokens) # Embedding: (dim, seq_len, batch)
     rope = model.rope[start_pos+1:start_pos+size(tokens, 1)]
-    mask = create_mask(h)
+    if size(h, 2) == 1
+        mask = create_mask(h)
+    else
+        mask = create_mask(h; precached_size = start_pos)
+    end
     for layer in model.layers
         h = layer(h, start_pos, rope, mask)
     end

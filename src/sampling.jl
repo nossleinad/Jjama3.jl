@@ -19,18 +19,29 @@ function generate(
     sampler::Function=argmax_sampler,
     tokenizer_for_printing = nothing,
     end_token = 128010,
+    clear_cache = true,
+    pos_offset = 0,
     device = identity
 ) where T
     current_len = length(initial_tokens)
     tokens = vcat(initial_tokens, similar(initial_tokens, max_new_tokens))
 
-    for layer in model.layers
-        config!(layer.attention.cache, seq_length = current_len + max_new_tokens)
+    # Clear KV caches
+    if clear_cache
+        for layer in model.layers
+            clear!(layer.attention.cache)
+            config!(layer.attention.cache, seq_length = current_len + max_new_tokens)
+        end
+    else
+        for layer in model.layers
+            extend!(layer.attention.cache, current_len + max_new_tokens + pos_offset)
+        end
     end
 
     input_tokens = device(reshape(initial_tokens, :, 1))  # (seq_len, batch=1)
-    logits = model(input_tokens, 0)
-    start_pos = current_len
+    # HERE - THE ZERO SHOULD BE THE END OF THE PREVIOUS SEQUENCE.
+    logits = model(input_tokens, pos_offset)
+    start_pos = current_len + pos_offset
 
     # Generate new tokens one at a time
     for _ in 1:max_new_tokens
@@ -46,14 +57,9 @@ function generate(
         next_token = sampler(logits[:, end, 1])
         current_len += 1
         tokens[current_len] = next_token
-        !isnothing(tokenizer_for_printing) && print(decode(tokenizer_for_printing, [next_token]))
+        !isnothing(tokenizer_for_printing) && print(decode(tokenizer_for_printing, [next_token], skip_special_tokens = false))
         next_token == end_token && break
         start_pos += 1
     end
-    # Clear KV caches
-    for layer in model.layers
-        clear!(layer.attention.cache)
-    end
     return tokens[1:current_len]
 end
-
