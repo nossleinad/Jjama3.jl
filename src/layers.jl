@@ -195,12 +195,13 @@ end
 Flux.@layer TransformerBlock trainable=(attention,)
 
 
-struct Transformer{E<:Flux.Embedding,B<:Tuple{Vararg{TransformerBlock}},N<:RMSNorm,O<:Dense,R<:RoPE}
+mutable struct Transformer{E<:Flux.Embedding,B<:Tuple{Vararg{TransformerBlock}},N<:RMSNorm,O<:Dense,R<:RoPE}
     tok_embeddings::E
     layers::B
     norm::N
     output::O
     rope::R
+    pos::Int
 end
 
 Flux.@layer Transformer trainable=(layers,)
@@ -219,5 +220,16 @@ function Transformer(
     norm = RMSNorm(dim, eps=norm_eps)
     output = Dense(dim => vocab_size, bias=false)
     rope = RoPE(dim ÷ n_heads, max_seq_len * 2; theta=rope_theta, use_scaled=use_scaled_rope, scale_factor=scale_factor)
-    Transformer(tok_embeddings, layers, norm, output, rope)
+    Transformer(tok_embeddings, layers, norm, output, rope, 0)
 end
+
+function clear_cache!(model::Transformer)
+    model.pos = 0
+    for layer in model.layers
+        clear!(layer.attention.cache)
+    end
+end
+
+config_cache!(model::Transformer, seq_length) = for layer in model.layers config!(layer.attention.cache, seq_length = seq_length) end
+
+extend_cache!(model::Transformer, seq_length) = for layer in model.layers extend!(layer.attention.cache, seq_length + model.pos) end
