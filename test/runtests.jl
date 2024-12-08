@@ -6,7 +6,7 @@ using JSON3
 
     @testset "Amino Acid Model" begin
         url_branch = "https://raw.githubusercontent.com/MurrellGroup/Jjama3.jl/aminoacid-model/"
-        config_path = Downloads.download(url_branch * "tinyabllama_config.json")
+        config_path = download(url_branch * "tinyabllama_config.json")
         model_path = download(url_branch * "tinyabllama.safetensors")
         config = JSON3.read(read(config_path, String))
         model = load_llama3_from_safetensors([model_path], config)
