@@ -10,13 +10,10 @@
 
 ## Installation
 
-
-We've split this into a few (unregistered) packages, so you'll need to add them all, and you need JSON3 for loading the configs:
+Add JSON3 for loading the configs, and the unregistered HuggingFaceTokenizers dependency for tokenization, in addition to Jjama3:
 ```
 ] add JSON3
   add https://github.com/MurrellGroup/HuggingFaceTokenizers.jl
-  add https://github.com/MurrellGroup/LowRankLayers.jl
-  add https://github.com/MurrellGroup/LogitSamplers.jl
   add https://github.com/MurrellGroup/Jjama3.jl
 ```
 
