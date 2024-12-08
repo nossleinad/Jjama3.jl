@@ -5,7 +5,7 @@ end
 
 Base.copy(cache::KVCache) = KVCache(copy(cache.cache_k), copy(cache.cache_v))
 
-Flux.@layer KVCache
+Flux.@layer KVCache trainable=()
 
 head_dim(cache::KVCache) = size(cache.cache_k, 1)
 seq_length(cache::KVCache) = size(cache.cache_k, 2)
