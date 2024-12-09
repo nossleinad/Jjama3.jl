@@ -243,3 +243,12 @@ config_cache!(model::Transformer, seq_length) = for layer in model.layers config
 
 extend_cache!(model::Transformer, seq_length) = for layer in model.layers extend!(layer.attention.cache, seq_length + model.pos) end
 
+function rerope_cache!(model, newstart, rope_theta; range = 1:model.pos)
+    dim = model.layers[1].attention.dim ÷ model.layers[1].attention.n_heads
+    oldrope = model.rope[range]
+    newrope = RoPE(dim, (last(range)-first(range))+newstart+1, theta=rope_theta, start_pos=newstart)
+    for l in model.layers
+        unroped = unrope(oldrope, l.attention.cache.cache_k[:,range,:,:])
+        l.attention.cache.cache_k[:,range,:,:] .= newrope(unroped)
+    end
+end

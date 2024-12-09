@@ -25,6 +25,7 @@ export Attention
 export TransformerBlock
 export Transformer
 export unrope
+export rerope_cache!
 
 include("model.jl")
 export forward_loss

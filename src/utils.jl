@@ -275,14 +275,3 @@ function export_model(model, output_path; type_convert = identity)
     SafeTensors.serialize(output_path, weights)
     return nothing
 end
-
-#=
-#Example for how to save a model in safetensors format
-julia> using Random, BFloat16s, SafeTensors
-julia> weights = Dict("W"=>randn(BFloat16, 3, 5), "b"=>rand(BFloat16, 3))
-Dict{String, Array{BFloat16}} with 2 entries:
-  "W" => [0.617188 0.695312 … 0.390625 -2.0; -0.65625 -0.617188 … 0.652344 0.244141; 0.226562 2.70312 … -0.174805 -0.7773…
-  "b" => [0.111816, 0.566406, 0.283203]
-julia> f = tempname();
-julia> SafeTensors.serialize(f, weights)
-=#
