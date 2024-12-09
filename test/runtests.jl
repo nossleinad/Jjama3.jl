@@ -1,13 +1,14 @@
 using Jjama3
 using Test
 using JSON3
+using Downloads
 
 @testset "Jjama3.jl" begin
 
     @testset "Amino Acid Model" begin
         url_branch = "https://raw.githubusercontent.com/MurrellGroup/Jjama3.jl/aminoacid-model/"
-        config_path = download(url_branch * "tinyabllama_config.json")
-        model_path = download(url_branch * "tinyabllama.safetensors")
+        config_path = Downloads.download(url_branch * "tinyabllama_config.json")
+        model_path = Downloads.download(url_branch * "tinyabllama.safetensors")
         config = JSON3.read(read(config_path, String))
         model = load_llama3_from_safetensors([model_path], config)
         AAs = collect(">ACDEFGHIKLMNPQRSTVWY.")

@@ -1,7 +1,7 @@
 #Note about output layer being tied to embedding: https://github.com/meta-llama/llama-models/issues/172
 
 function create_mask(h::AbstractArray{T}; precached_size = 0) where T<:AbstractFloat
-    Flux.ChainRulesCore.ignore() do
+    Flux.ChainRulesCore.ignore_derivatives() do
         dim, seqlen, batch = size(h)
         mask = similar(h, seqlen, seqlen)
         mask .= T(-Inf)
@@ -42,7 +42,7 @@ end
 function forward_loss(model::Transformer, inputs::AbstractArray, 
                      targets::AbstractArray; clear_cache = true, loss_mask = nothing)
     if clear_cache
-        Flux.ChainRulesCore.ignore() do
+        Flux.ChainRulesCore.ignore_derivatives() do
             clear_cache!(model)
         end
     end

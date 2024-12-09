@@ -18,9 +18,8 @@ StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 [weakdeps]
 Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
 
-[sources.HuggingFaceTokenizers]
-rev = "main"
-url = "https://github.com/MurrellGroup/HuggingFaceTokenizers.jl"
+[sources]
+HuggingFaceTokenizers = {rev = "main", url = "https://github.com/MurrellGroup/HuggingFaceTokenizers.jl"}
 
 [extensions]
 MetalExt = "Metal"
@@ -39,7 +38,8 @@ julia = "1.11"
 
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+Downloads = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
 JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
 
 [targets]
-test = ["Test", "JSON3"]
+test = ["Test", "Downloads", "JSON3"]
