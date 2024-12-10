@@ -2,9 +2,7 @@ module Jjama3
 
 using Flux
 using SafeTensors
-using Distributions
 using LinearAlgebra
-using StatsBase
 using NNlib
 using LogitSamplers
 using LowRankLayers
