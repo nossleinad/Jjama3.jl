@@ -252,3 +252,23 @@ function rerope_cache!(model, newstart, rope_theta; range = 1:model.pos)
         l.attention.cache.cache_k[:,range,:,:] .= newrope(unroped)
     end
 end
+
+function scrape_cache(model::Transformer)    
+    cache = (k = [], v = [])
+    for l in model.layers
+        push!(cache.k, copy(l.attention.cache.cache_k[:,1:model.pos,:,:]))
+        push!(cache.v, copy(l.attention.cache.cache_v[:,1:model.pos,:,:]))
+    end
+    return cache
+end
+
+function append_cache!(model, cache)
+    if model.pos + size(cache.k[1], 2) > size(model.layers[1].attention.cache.cache_k, 2)
+        extend_cache!(model, model.pos + size(cache.k[1], 2))
+    end
+    for (i, l) in enumerate(model.layers)
+        l.attention.cache.cache_k[:, model.pos+1:model.pos+size(cache.k[i], 2), :, :] .= cache.k[i]
+        l.attention.cache.cache_v[:, model.pos+1:model.pos+size(cache.v[i], 2), :, :] .= cache.v[i]
+    end
+    model.pos = model.pos + size(cache.k[1], 2)
+end
