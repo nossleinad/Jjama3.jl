@@ -15,22 +15,6 @@ function create_mask(h::AbstractArray{T}; precached_size = 0) where T<:AbstractF
     end
 end
 
-function (model::Transformer)(tokens::AbstractArray{Int})
-    h = model.tok_embeddings(tokens) # Embedding: (dim, seq_len, batch)
-    rope = model.rope[model.pos+1:model.pos+size(tokens, 1)]
-    if size(h, 2) == 1
-        mask = create_mask(h)
-    else
-        mask = create_mask(h; precached_size = model.pos)
-    end
-    for layer in model.layers
-        h = layer(h, model.pos, rope, mask)
-    end
-    h = model.norm(h)
-    output = model.output(h)
-    model.pos += size(tokens, 1)
-    return output
-end
 
 function masked_agg(ce, mask)
     if mask !== nothing
@@ -39,15 +23,63 @@ function masked_agg(ce, mask)
     return sum(ce)/sum(mask)
 end
 
-function forward_loss(model::Transformer, inputs::AbstractArray, 
-                     targets::AbstractArray; clear_cache = true, loss_mask = nothing)
+#Hoping this will wind up in Zygote.jl
+"""
+    eager_update!(state, model, update!)
+
+Updates params during the backward pass, saving memory.
+
+f(model, xs...) = model(xs...)
+h = f(Zygote.eager_update!(state.layers[i], model.layers[i], Optimisers.update!), h, other_args...)
+"""
+function eager_update!(state, model, update!)
+    function update_hook(dmodel)
+        update!(state, model, dmodel)
+        return nothing
+    end
+    return Flux.Zygote.hook(update_hook, model)
+end
+
+
+wrap(model, xs...) = model(xs...)
+function (model::Transformer)(tokens::AbstractArray{Int}, opt_state; clear_cache = false, checkpointed = false)
     if clear_cache
         Flux.ChainRulesCore.ignore_derivatives() do
-            clear_cache!(model)
+            Jjama3.clear_cache!(model)
         end
     end
-    logits = model(inputs)
-    vocab_size = size(model.tok_embeddings.weight, 2)
+    h = model.tok_embeddings(tokens) # Embedding: (dim, seq_len, batch)
+    rope = model.rope[model.pos+1:model.pos+size(tokens, 1)]
+    if size(h, 2) == 1
+        mask = Jjama3.create_mask(h)
+    else
+        mask = Jjama3.create_mask(h; precached_size = model.pos)
+    end
+    for i in 1:length(model.layers)
+        if !isnothing(opt_state)
+            if checkpointed
+                h = Flux.Zygote.checkpointed(wrap, eager_update!(opt_state.layers[i], model.layers[i], Optimisers.update!), h, model.pos, rope, mask)   
+            else
+                h = wrap(eager_update!(opt_state.layers[i], model.layers[i], Optimisers.update!), h, model.pos, rope, mask)
+            end
+        else
+            if checkpointed
+                h = Flux.Zygote.checkpointed(wrap, model.layers[i], h, model.pos, rope, mask)
+            else
+                h = model.layers[i](h, model.pos, rope, mask)
+            end
+        end
+    end
+    h = model.norm(h)
+    output = model.output(h)
+    model.pos += size(tokens, 1)
+    return output
+end
+
+(model::Transformer)(tokens::AbstractArray{Int}; clear_cache = false, checkpointed = false) = model(tokens, nothing; clear_cache, checkpointed)
+
+function loss(logits, targets::AbstractArray; loss_mask = nothing)
+    vocab_size = size(logits,1)
     gt = Flux.onehotbatch(targets, 1:vocab_size)
     if loss_mask !== nothing
         loss = Flux.logitcrossentropy(logits, gt, agg = x -> masked_agg(x, loss_mask))
@@ -59,3 +91,4 @@ end
 
 # compat
 forward_inference(model, args...) = model(args...)
+forward_loss(model::Transformer, inputs::AbstractArray, targets::AbstractArray; clear_cache = true, loss_mask = nothing) = loss(forward(model, inputs; clear_cache = clear_cache), targets; loss_mask = loss_mask)

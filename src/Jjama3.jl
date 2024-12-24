@@ -28,6 +28,7 @@ export rerope_cache!
 include("model.jl")
 export forward_loss
 export forward_inference
+export loss
 
 include("sampling.jl")
 export top_pk_sampler
