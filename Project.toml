@@ -4,7 +4,7 @@ authors = ["murrellb <murrellb@gmail.com> and contributors"]
 version = "1.1.0-DEV"
 
 [deps]
-Accessors = "7d9f7c33-5ae7-4f3b-8dc6-eff91059b697"
+ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
 Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
 HuggingFaceTokenizers = "a6888d44-1185-43bb-bd0f-7806f9976d18"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -23,19 +23,19 @@ HuggingFaceTokenizers = {rev = "main", url = "https://github.com/MurrellGroup/Hu
 MetalExt = "Metal"
 
 [compat]
-Accessors = "0.1.38"
+ChainRulesCore = "1.25.0"
 Flux = "0.14, 0.15"
-LogitSamplers = "0.1"
-LowRankLayers = "0.1"
+LogitSamplers = "0.1.0"
+LowRankLayers = "0.1.2"
 Metal = "1"
 NNlib = "0.9"
 SafeTensors = "1"
 julia = "1.11"
 
 [extras]
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 Downloads = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
 JSON3 = "0f8b85d8-7281-11e9-16c2-39a750bddbf1"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
 test = ["Test", "Downloads", "JSON3"]

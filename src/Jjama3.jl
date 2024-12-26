@@ -6,6 +6,7 @@ using LinearAlgebra
 using NNlib
 using LogitSamplers
 using LowRankLayers
+#using ChainRulesCore
 
 using HuggingFaceTokenizers: HuggingFaceTokenizers, Tokenizer
 
@@ -24,6 +25,8 @@ export TransformerBlock
 export Transformer
 export unrope
 export rerope_cache!
+
+#include("sdpa.jl")
 
 include("model.jl")
 export forward_loss

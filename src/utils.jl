@@ -1,5 +1,3 @@
-using Accessors
-
 encode(tkn::Tokenizer, str; kwargs...) = HuggingFaceTokenizers.encode(tkn, str; kwargs...).ids .+ 1
 decode(tkn::Tokenizer, ids; kwargs...) = HuggingFaceTokenizers.decode(tkn, ids .- 1; kwargs...)
 
@@ -162,37 +160,37 @@ function load_llama3_from_safetensors(
     if !isempty(add_lora_to)
         if :Q in add_lora_to
             for layer in model.layers
-                @reset layer.attention.wq = LoRADense(layer.attention.wq, lora_dim)
+                layer.attention.wq = LoRADense(layer.attention.wq, lora_dim)
             end
         end
         if :K in add_lora_to
             for layer in model.layers
-                @reset layer.attention.wk = LoRADense(layer.attention.wk, lora_dim)
+                layer.attention.wk = LoRADense(layer.attention.wk, lora_dim)
             end
         end
         if :V in add_lora_to
             for layer in model.layers
-                @reset layer.attention.wv = LoRADense(layer.attention.wv, lora_dim)
+                layer.attention.wv = LoRADense(layer.attention.wv, lora_dim)
             end
         end
         if :O in add_lora_to
             for layer in model.layers
-                @reset layer.attention.wo = LoRADense(layer.attention.wo, lora_dim)
+                layer.attention.wo = LoRADense(layer.attention.wo, lora_dim)
             end
         end
         if :w1 in add_lora_to
             for layer in model.layers
-                @reset layer.feed_forward.w1 = LoRADense(layer.feed_forward.w1, lora_dim)
+                layer.feed_forward.w1 = LoRADense(layer.feed_forward.w1, lora_dim)
             end
         end
         if :w2 in add_lora_to
             for layer in model.layers
-                @reset layer.feed_forward.w2 = LoRADense(layer.feed_forward.w2, lora_dim)
+                layer.feed_forward.w2 = LoRADense(layer.feed_forward.w2, lora_dim)
             end
         end
         if :w3 in add_lora_to
             for layer in model.layers
-                @reset layer.feed_forward.w3 = LoRADense(layer.feed_forward.w3, lora_dim)
+                layer.feed_forward.w3 = LoRADense(layer.feed_forward.w3, lora_dim)
             end
         end
     end

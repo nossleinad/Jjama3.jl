@@ -101,16 +101,16 @@ function unrope(rope, x)
     )
 end
 
-struct Attention{Q<:AnyDense,K<:AnyDense,V<:AnyDense,O<:AnyDense,C<:KVCache}
-    wq::Q
-    wk::K
-    wv::V
-    wo::O
+mutable struct Attention
+    wq::AnyDense
+    wk::AnyDense
+    wv::AnyDense
+    wo::AnyDense
     dim::Int
     n_heads::Int
     n_kv_heads::Int
     head_dim::Int
-    cache::C
+    cache::KVCache
 end
 
 Flux.@layer Attention trainable=(wq,wv)
