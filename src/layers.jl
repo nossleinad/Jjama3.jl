@@ -101,16 +101,16 @@ function unrope(rope, x)
     )
 end
 
-struct Attention{Q<:AnyDense,K<:AnyDense,V<:AnyDense,O<:AnyDense,C<:KVCache}
-    wq::Q
-    wk::K
-    wv::V
-    wo::O
+mutable struct Attention
+    wq::AnyDense
+    wk::AnyDense
+    wv::AnyDense
+    wo::AnyDense
     dim::Int
     n_heads::Int
     n_kv_heads::Int
     head_dim::Int
-    cache::C
+    cache::KVCache
 end
 
 Flux.@layer Attention trainable=(wq,wv)
@@ -131,6 +131,13 @@ function Attention(dim::Int, n_heads::Int, n_kv_heads=n_heads; qkv_bias=false)
 end
 
 repeat_kv(x::AbstractArray, n_rep::Int) = isone(n_rep) ? x : repeat(x, 1, n_rep, 1, 1)
+
+function sdpa(xq::AbstractArray{T}, xk::AbstractArray{T}, xv::AbstractArray{T}, mask::AbstractArray{T}, head_dim::Int) where T
+    scores = batched_mul(batched_transpose(xk), xq) / sqrt(T(head_dim))
+    scores = scores .+ mask
+    sm_scores = softmax(scores; dims=1)
+    return batched_mul(xv, sm_scores)
+end
 
 function (attn::Attention)(x::AbstractArray{T}, start_pos::Integer, rope=nothing, mask=false) where T
     _, seqlen, batch = size(x)
@@ -161,17 +168,16 @@ function (attn::Attention)(x::AbstractArray{T}, start_pos::Integer, rope=nothing
     xk_for_attn = reshape(xk, attn.head_dim, :, attn.n_heads * batch)
     xv_for_attn = reshape(xv, attn.head_dim, :, attn.n_heads * batch)
 
-    scores = batched_mul(batched_transpose(xk_for_attn), xq_for_attn) / sqrt(T(attn.head_dim))
-    scores = scores .+ mask
-    sm_scores = softmax(scores; dims=1)
-
-    output = batched_mul(xv_for_attn, sm_scores)
+    output = sdpa(xq_for_attn, xk_for_attn, xv_for_attn, mask, attn.head_dim)
+    
     e_output = reshape(output, (attn.head_dim, seqlen, attn.n_heads, batch))
     p_output = permutedims(e_output, (1,3,2,4)) 
     r_output = reshape(p_output, (attn.n_heads * attn.head_dim, seqlen, batch))
     proj = attn.wo(r_output)
     return proj
 end
+
+
 
 
 struct TransformerBlock{A<:Attention,F<:FeedForward,AN<:RMSNorm,FN<:RMSNorm}
