@@ -8,11 +8,6 @@ using LogitSamplers
 using LowRankLayers
 using ChainRulesCore
 
-using HuggingFaceTokenizers: HuggingFaceTokenizers, Tokenizer
-
-const tokenizer_from_repo = HuggingFaceTokenizers.from_pretrained
-const tokenizer_from_file = HuggingFaceTokenizers.from_file
-
 include("cache.jl")
 export KVCache
 
@@ -41,9 +36,6 @@ export argmax_sampler
 export top_nσ_sampler
 export min_p_sampler
 export generate
-export tokenizer_from_repo
-export tokenizer_from_file
-export Tokenizer
 
 include("utils.jl")
 export encode
