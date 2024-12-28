@@ -1,6 +1,6 @@
 #Trying out some tricks for attention.
 
-#Figure out where to thunk: https://juliadiff.org/ChainRulesCore.jl/stable/rule_author/example.html
+#Figure out where to thunk...
 
 #Will use Zygote - for testing grad correctness:
 function sdpa_norrule(xq::AbstractArray{T}, xk::AbstractArray{T}, xv::AbstractArray{T}, mask::AbstractArray{T}, head_dim::Int) where T
@@ -35,14 +35,14 @@ function keychunked_sdpa(xq::AbstractArray{T,3},
                       xv::AbstractArray{T,3},
                       mask::AbstractArray{T},
                       head_dim::Int;
-                      k_chunk_size::Int=256
+                      k_chunk_size::Int=128
                      ) where {T<:Real}
+
     k_len  = size(xk,2)
     q_len  = size(xq,2)
     nbatch = size(xq,3)
 
     scale = one(T) / sqrt(T(head_dim))
-
     
     partial_max  = fill!(similar(xq, 1, q_len, nbatch), -Inf)
     partial_expw = fill!(similar(xq, 1, q_len, nbatch), T(0))
@@ -62,7 +62,11 @@ function keychunked_sdpa(xq::AbstractArray{T,3},
         k_batch = min(k_chunk_size, k_len - kstart + 1)
         xk_chunk   = @view xk[:, kstart : kstart + k_batch - 1, :]
         xv_chunk   = @view xv[:, kstart : kstart + k_batch - 1, :]
-        mask_chunk = @view mask[kstart : kstart + k_batch - 1, :, :]
+        if length(mask) > 1
+            mask_chunk = @view mask[kstart : kstart + k_batch - 1, :, :]
+        else
+            mask_chunk = mask #Handles the case where the mask is 1-by-1 for sampling a single token.
+        end
         attn_view = @view attn[1:k_batch, 1:q_len, 1:nbatch]
         xkT_chunk = batched_transpose(xk_chunk)
 
@@ -171,8 +175,8 @@ end
 #=
 #Testing forward passes
 begin
-    L1 = 400 #Query
-    L2 = 599 #Key/Value
+    L1 = 872 #Query
+    L2 = 267 #Key/Value
     D = 32
     HB = 80
     xq, xk, xv, mask = randn(Float32, D, L1, HB), randn(Float32, D, L2, HB), randn(Float32, D, L2, HB), zeros(Float32, L2, L1);
@@ -187,9 +191,13 @@ begin
     @assert isapprox(res, qcres)
     @assert isapprox(res, kcres)
 
-    @btime f($xq, $xk, $xv, $mask, $D)
-    @btime fqc($xq, $xk, $xv, $mask, $D)
-    @btime fkc($xq, $xk, $xv, $mask, $D)
+    @show size(res)
+    @show size(kcres)
+
+
+    #@btime f($xq, $xk, $xv, $mask, $D)
+    #@btime fqc($xq, $xk, $xv, $mask, $D)
+    #@btime fkc($xq, $xk, $xv, $mask, $D)
 end;
 =#
 
