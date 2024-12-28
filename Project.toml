@@ -22,7 +22,7 @@ MetalExt = "Metal"
 
 [compat]
 ChainRulesCore = "1.25.0"
-Flux = "0.14, 0.15"
+Flux = "0.14, 0.15, 0.16"
 HuggingFaceTokenizers = "0.1"
 LogitSamplers = "0.1.0"
 LowRankLayers = "0.1.2"

@@ -101,6 +101,12 @@ function unrope(rope, x)
     )
 end
 
+#Scaled dot product attention
+function sdpa(xq::AbstractArray{T}, xk::AbstractArray{T}, xv::AbstractArray{T}, mask::AbstractArray{T}, head_dim::Int) where T
+    A = softmax(batched_mul(batched_transpose(xk), xq) / sqrt(T(head_dim)) .+ mask; dims=1)
+    return batched_mul(xv, A)
+end
+
 mutable struct Attention
     wq::AnyDense
     wk::AnyDense
@@ -126,20 +132,13 @@ function Attention(dim::Int, n_heads::Int, n_kv_heads=n_heads; qkv_bias=false)
         n_heads,
         n_kv_heads,
         head_dim,
-        KVCache(Float32; n_kv_heads, head_dim),
+        KVCache(Float32; n_kv_heads, head_dim)
     )
 end
 
 repeat_kv(x::AbstractArray, n_rep::Int) = isone(n_rep) ? x : repeat(x, 1, n_rep, 1, 1)
 
-function sdpa(xq::AbstractArray{T}, xk::AbstractArray{T}, xv::AbstractArray{T}, mask::AbstractArray{T}, head_dim::Int) where T
-    scores = batched_mul(batched_transpose(xk), xq) / sqrt(T(head_dim))
-    scores = scores .+ mask
-    sm_scores = softmax(scores; dims=1)
-    return batched_mul(xv, sm_scores)
-end
-
-function (attn::Attention)(x::AbstractArray{T}, start_pos::Integer, rope=nothing, mask=false) where T
+function (attn::Attention)(x::AbstractArray{T}, start_pos::Integer, rope=nothing, mask=false, sdpa_func = sdpa) where T
     _, seqlen, batch = size(x)
 
     xq = attn.wq(x)
@@ -168,7 +167,7 @@ function (attn::Attention)(x::AbstractArray{T}, start_pos::Integer, rope=nothing
     xk_for_attn = reshape(xk, attn.head_dim, :, attn.n_heads * batch)
     xv_for_attn = reshape(xv, attn.head_dim, :, attn.n_heads * batch)
 
-    output = sdpa(xq_for_attn, xk_for_attn, xv_for_attn, mask, attn.head_dim)
+    output = sdpa_func(xq_for_attn, xk_for_attn, xv_for_attn, mask, attn.head_dim)
     
     e_output = reshape(output, (attn.head_dim, seqlen, attn.n_heads, batch))
     p_output = permutedims(e_output, (1,3,2,4)) 
@@ -176,9 +175,6 @@ function (attn::Attention)(x::AbstractArray{T}, start_pos::Integer, rope=nothing
     proj = attn.wo(r_output)
     return proj
 end
-
-
-
 
 struct TransformerBlock{A<:Attention,F<:FeedForward,AN<:RMSNorm,FN<:RMSNorm}
     attention::A
@@ -189,7 +185,7 @@ end
 
 function TransformerBlock(
     dim::Int, n_heads::Int, n_kv_heads::Int = n_heads, ff_hidden_dim = 4 * dim;
-    norm_eps=1f-5, qkv_bias=false,
+    norm_eps=1f-5, qkv_bias=false
 )
     TransformerBlock(
         Attention(dim, n_heads, n_kv_heads; qkv_bias),
@@ -199,14 +195,13 @@ function TransformerBlock(
     )
 end
 
-function (block::TransformerBlock)(x, start_pos, rope, mask=nothing)
-    h = x + block.attention(block.attention_norm(x), start_pos, rope, mask)
+function (block::TransformerBlock)(x, start_pos, rope, mask, sdpa)
+    h = x + block.attention(block.attention_norm(x), start_pos, rope, mask, sdpa)
     out = h + block.feed_forward(block.ffn_norm(h))
     return out
 end
 
 Flux.@layer TransformerBlock trainable=(attention,)
-
 
 mutable struct Transformer{E<:Flux.Embedding,B<:Tuple{Vararg{TransformerBlock}},N<:RMSNorm,O<:Dense,R<:RoPE}
     tok_embeddings::E
@@ -226,7 +221,7 @@ function Transformer(
     qkv_bias=false,
     rope_theta::T=500000f0,
     use_scaled_rope=false,
-    scale_factor=8,
+    scale_factor=8
 ) where T
     tok_embeddings = Flux.Embedding(vocab_size => dim)
     layers = Tuple(TransformerBlock(dim, n_heads, n_kv_heads, ff_hidden_dim; norm_eps=norm_eps, qkv_bias=qkv_bias) for _ in 1:n_layers)
