@@ -50,7 +50,7 @@ function (model::Transformer)(tokens::AbstractArray{Int}, opt_state; clear_cache
     end
     h = model.tok_embeddings(tokens) # Embedding: (dim, seq_len, batch)
     rope = model.rope[model.pos+1:model.pos+size(tokens, 1)]
-    if size(h, 2) == 1
+    if size(h, 2) == 1 #If there is only one new token, then a 1-by-1 mask = 0 works, via broadcasting (if the attention functions allow it)
         mask = Jjama3.create_mask(h)
     else
         mask = Jjama3.create_mask(h; precached_size = model.pos)
