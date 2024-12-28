@@ -1,6 +1,3 @@
-encode(tkn::Tokenizer, str; kwargs...) = HuggingFaceTokenizers.encode(tkn, str; kwargs...).ids .+ 1
-decode(tkn::Tokenizer, ids; kwargs...) = HuggingFaceTokenizers.decode(tkn, ids .- 1; kwargs...)
-
 #Trivial Char tokenizers:
 encode(chars::Vector{Char}, str::String) = [findfirst(==(c), chars) for c in str]
 decode(chars::Vector{Char}, enc::Vector{Int}; skip_special_tokens=false) = String([chars[i] for i in enc])
