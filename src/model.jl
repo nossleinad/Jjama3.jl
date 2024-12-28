@@ -42,7 +42,7 @@ end
 
 
 wrap(model, xs...) = model(xs...)
-function (model::Transformer)(tokens::AbstractArray{Int}, opt_state; clear_cache = false, checkpointed = false)
+function (model::Transformer)(tokens::AbstractArray{Int}, opt_state; clear_cache = false, checkpoint_func = wrap)
     if clear_cache
         Flux.ChainRulesCore.ignore_derivatives() do
             Jjama3.clear_cache!(model)
@@ -57,17 +57,10 @@ function (model::Transformer)(tokens::AbstractArray{Int}, opt_state; clear_cache
     end
     for i in 1:length(model.layers)
         if !isnothing(opt_state)
-            if checkpointed
-                h = Flux.Zygote.checkpointed(wrap, eager_update!(opt_state.layers[i], model.layers[i], Optimisers.update!), h, model.pos, rope, mask)   
-            else
-                h = wrap(eager_update!(opt_state.layers[i], model.layers[i], Optimisers.update!), h, model.pos, rope, mask)
-            end
+            #If checkpoint_func is also just wrap, then this does nothing, but if its Zygote.checkpointed, then this is a checkpointed update
+            h = checkpoint_func(wrap, eager_update!(opt_state.layers[i], model.layers[i], Optimisers.update!), h, model.pos, rope, mask)   
         else
-            if checkpointed
-                h = Flux.Zygote.checkpointed(wrap, model.layers[i], h, model.pos, rope, mask)
-            else
-                h = model.layers[i](h, model.pos, rope, mask)
-            end
+            h = checkpoint_func(wrap, model.layers[i], h, model.pos, rope, mask)
         end
     end
     h = model.norm(h)
@@ -76,7 +69,7 @@ function (model::Transformer)(tokens::AbstractArray{Int}, opt_state; clear_cache
     return output
 end
 
-(model::Transformer)(tokens::AbstractArray{Int}; clear_cache = false, checkpointed = false) = model(tokens, nothing; clear_cache, checkpointed)
+(model::Transformer)(tokens::AbstractArray{Int}; clear_cache = false, checkpoint_func = wrap) = model(tokens, nothing; clear_cache, checkpoint_func)
 
 function loss(logits, targets::AbstractArray; loss_mask = nothing)
     vocab_size = size(logits,1)
