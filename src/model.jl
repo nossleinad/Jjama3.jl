@@ -42,7 +42,7 @@ end
 
 
 wrap(model, xs...) = model(xs...)
-function (model::Transformer)(tokens::AbstractArray{Int}, opt_state; clear_cache = false, checkpoint_func = wrap)
+function (model::Transformer)(tokens::AbstractArray{Int}, opt_state; clear_cache = false, checkpoint_func = wrap, sdpa_func = sdpa)
     if clear_cache
         Flux.ChainRulesCore.ignore_derivatives() do
             Jjama3.clear_cache!(model)
@@ -58,9 +58,9 @@ function (model::Transformer)(tokens::AbstractArray{Int}, opt_state; clear_cache
     for i in 1:length(model.layers)
         if !isnothing(opt_state)
             #If checkpoint_func is also just wrap, then this does nothing, but if its Zygote.checkpointed, then this is a checkpointed update
-            h = checkpoint_func(wrap, eager_update!(opt_state.layers[i], model.layers[i], Optimisers.update!), h, model.pos, rope, mask)   
+            h = checkpoint_func(wrap, eager_update!(opt_state.layers[i], model.layers[i], Optimisers.update!), h, model.pos, rope, mask, sdpa_func)   
         else
-            h = checkpoint_func(wrap, model.layers[i], h, model.pos, rope, mask)
+            h = checkpoint_func(wrap, model.layers[i], h, model.pos, rope, mask, sdpa_func)
         end
     end
     h = model.norm(h)
@@ -69,7 +69,7 @@ function (model::Transformer)(tokens::AbstractArray{Int}, opt_state; clear_cache
     return output
 end
 
-(model::Transformer)(tokens::AbstractArray{Int}; clear_cache = false, checkpoint_func = wrap) = model(tokens, nothing; clear_cache, checkpoint_func)
+(model::Transformer)(tokens::AbstractArray{Int}; clear_cache = false, checkpoint_func = wrap, sdpa_func = sdpa) = model(tokens, nothing; clear_cache, checkpoint_func, sdpa_func)
 
 function loss(logits, targets::AbstractArray; loss_mask = nothing)
     vocab_size = size(logits,1)

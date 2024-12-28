@@ -21,7 +21,8 @@ function generate(
     end_token = 128010,
     clear_cache = true,
     pos_offset = 0,
-    device = identity
+    device = identity,
+    sdpa_func = sdpa
 ) where T
     current_len = length(initial_tokens)
     tokens = vcat(initial_tokens, similar(initial_tokens, max_new_tokens))
@@ -32,10 +33,10 @@ function generate(
         extend_cache!(model, current_len + max_new_tokens)
     end
     input_tokens = device(reshape(initial_tokens, :, 1))  # (seq_len, batch=1)
-    logits = model(input_tokens)
+    logits = model(input_tokens, sdpa_func = sdpa_func)
     for _ in 1:max_new_tokens
         input_tokens = device(reshape([tokens[current_len]], :, 1))  # Just the last token
-        logits = model(input_tokens)
+        logits = model(input_tokens, sdpa_func = sdpa_func)
         next_token = sampler(logits[:, end, 1])
         current_len += 1
         tokens[current_len] = next_token

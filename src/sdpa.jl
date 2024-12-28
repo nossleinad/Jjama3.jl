@@ -37,7 +37,6 @@ function keychunked_sdpa(xq::AbstractArray{T,3},
                       head_dim::Int;
                       k_chunk_size::Int=256
                      ) where {T<:Real}
-
     k_len  = size(xk,2)
     q_len  = size(xq,2)
     nbatch = size(xq,3)
