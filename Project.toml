@@ -29,7 +29,7 @@ LowRankLayers = "0.1.2"
 Metal = "1"
 NNlib = "0.9"
 SafeTensors = "1"
-julia = "1.11"
+julia = "1.10"
 
 [extras]
 Downloads = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
