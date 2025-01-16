@@ -22,7 +22,7 @@ Add JSON3 for loading the configs, and the unregistered HuggingFaceTokenizers de
 Download a Llama3 model `config.json`, `tokenizer.json`, and model safetensor weights from Hugging Face. Eg. [SmolLM2-360M-Instruct](https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct/tree/main). Note: Hugging Face Llama3 models use a different RoPE convention to the original Meta implementation, and their weights have been permuted. This package works with the Huggingface convention, so if you load from the original Meta-Llama weights from a different source you'll need to do something horrible.
 
 ```julia
-using JSON3, Jjama3
+using JSON3, HuggingFaceTokenizers, Jjama3
 
 config = JSON3.read(read("SmolLM2-360M-Instruct/config.json", String))
 model = load_llama3_from_safetensors("SmolLM2-360M-Instruct/model.safetensors", config)
