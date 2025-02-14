@@ -26,7 +26,7 @@ using JSON3, HuggingFaceTokenizers, Jjama3
 
 config = JSON3.read(read("SmolLM2-360M-Instruct/config.json", String))
 model = load_llama3_from_safetensors("SmolLM2-360M-Instruct/model.safetensors", config)
-tkn = tokenizer_from_file(Tokenizer, "SmolLM2-360M-Instruct/tokenizer.json")
+tkn = HuggingFaceTokenizers.from_file(HuggingFaceTokenizers.Tokenizer, "SmolLM2-360M-Instruct/tokenizer.json")
 
 prompt = smollm2_assistant_prompt(tkn,"Tell me the two worst things about Python.")
 generate(model, prompt,
@@ -94,7 +94,7 @@ Often we want to adjust model parameters to better fit our specific use case, by
 using Jjama3, JSON3, Flux
 
 config = JSON3.read(read("SmolLM2-360M-Instruct/config.json", String))
-tkn = tokenizer_from_file(Tokenizer, "SmolLM2-360M-Instruct/tokenizer.json")
+tkn = HuggingFaceTokenizers.from_file(HuggingFaceTokenizers.Tokenizer, "SmolLM2-360M-Instruct/tokenizer.json")
 eos = encode(tkn, "<|im_end|>")[end]
 
 #Add LoRA to Q and V matrices when loading the model
