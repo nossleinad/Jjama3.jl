@@ -26,6 +26,9 @@ export append_cache!
 include("sdpa.jl")
 
 include("model.jl")
+using Einops
+include("conditional.jl")
+export ConditionalTransformer
 export forward_loss
 export forward_inference
 export loss
