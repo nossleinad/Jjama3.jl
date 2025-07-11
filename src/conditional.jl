@@ -65,14 +65,16 @@ end
 
 ### Model ###
 
-function (model::ConditionalTransformer)(tokens::AbstractArray{Int}, conditionals::Tuple, opt_state; clear_cache = false, checkpoint_func = wrap, sdpa_func = sdpa)
+function (model::ConditionalTransformer)(tokens::AbstractArray{Int}, conditionals::Tuple, opt_state; clear_cache = false, checkpoint_func = wrap, sdpa_func = sdpa, conditional_list = 1:length(conditionals))
     if clear_cache
         Flux.ChainRulesCore.ignore_derivatives() do
             Jjama3.clear_cache!(model)
         end
     end
     h = model.tok_embeddings(tokens) # Embedding: (dim, seq_len, batch)
-    for (cond_emb, cond) in zip(model.cond_embeddings, conditionals)
+    for (ic, c) in enumerate(conditional_list)
+        cond_emb = model.cond_embeddings[c]
+        cond = conditionals[ic]
         h = h .+ rearrange(cond_emb(cond), (:dim, :batch) --> (:dim, 1, :batch))
     end
     rope = model.rope[model.pos+1:model.pos+size(tokens, 1)]
@@ -95,9 +97,11 @@ function (model::ConditionalTransformer)(tokens::AbstractArray{Int}, conditional
     return output
 end
 
-(model::ConditionalTransformer)(tokens::AbstractArray{Int}, conditionals; clear_cache = false, checkpoint_func = wrap, sdpa_func = sdpa) = model(tokens, conditionals, nothing; clear_cache, checkpoint_func, sdpa_func)
+(model::ConditionalTransformer)(tokens::AbstractArray{Int}, conditionals; clear_cache = false, checkpoint_func = wrap, sdpa_func = sdpa, conditional_list = 1:ifelse(conditionals isa Tuple, length(conditionals), 1)) = model(tokens, conditionals, nothing; clear_cache, checkpoint_func, sdpa_func, conditional_list)
 
-(model::ConditionalTransformer)(tokens::AbstractArray{Int}, conditional, opt_state; clear_cache = false, checkpoint_func = wrap, sdpa_func = sdpa) = model(tokens, (conditional,), opt_state; clear_cache, checkpoint_func, sdpa_func)
+(model::ConditionalTransformer)(tokens::AbstractArray{Int}, conditional, opt_state; clear_cache = false, checkpoint_func = wrap, sdpa_func = sdpa, conditional_list = 1:1) = model(tokens, (conditional,), opt_state; clear_cache, checkpoint_func, sdpa_func, conditional_list)
+
+(model::ConditionalTransformer)(tokens::AbstractArray{Int}; clear_cache = false, checkpoint_func = wrap, sdpa_func = sdpa) = model(tokens, (); clear_cache, checkpoint_func, sdpa_func)
 
 # compat
 forward_inference(model, args...) = model(args...)
@@ -124,7 +128,7 @@ generate(model, initial_tokens; max_new_tokens=100, sampler=top_pk_sampler(p=0.5
 function generate(
     model::ConditionalTransformer, 
     initial_tokens::AbstractArray{<:Integer},
-    conditionals::Tuple;
+    conditionals;
     max_new_tokens=100,
     sampler::Function=argmax_sampler,
     tokenizer_for_printing = nothing,
@@ -132,14 +136,15 @@ function generate(
     clear_cache = true,
     pos_offset = 0,
     device = identity,
-    sdpa_func = sdpa
+    sdpa_func = sdpa,
+    cache_padding = 0
 )
     tokens = vcat(initial_tokens, similar(initial_tokens, max_new_tokens))
     if clear_cache
         clear_cache!(model)
-        config_cache!(model, length(initial_tokens) + max_new_tokens)
+        config_cache!(model, 0)#length(initial_tokens) + max_new_tokens + cache_padding)
     else
-        extend_cache!(model, length(initial_tokens) + max_new_tokens)
+        extend_cache!(model, 0)#length(initial_tokens) + max_new_tokens + cache_padding)
     end
     input_tokens = device(reshape(initial_tokens, :, 1))  # (seq_len, batch=1)
     logits = model(input_tokens, conditionals, sdpa_func = sdpa_func)
@@ -150,36 +155,10 @@ function generate(
         return tokens
     end
     for _ in 1:max_new_tokens-1
-        input_tokens = device(reshape([tokens[model.pos+1]], :, 1))  # Just the last token
+        input_tokens = device(reshape(tokens[1:model.pos+1], :, 1))  # Just the last token
         logits = model(input_tokens, conditionals, sdpa_func = sdpa_func)
         nexttoken!(tokens, model, sampler, logits, tokenizer_for_printing)
         tokens[model.pos+1] == end_token && break
     end
     return tokens[1:model.pos+1]
 end
-
-generate(
-    model::ConditionalTransformer, 
-    initial_tokens::AbstractArray{<:Integer},
-    conditional;
-    max_new_tokens=100,
-    sampler::Function=argmax_sampler,
-    tokenizer_for_printing = nothing,
-    end_token = 128010,
-    clear_cache = true,
-    pos_offset = 0,
-    device = identity,
-    sdpa_func = sdpa
-) = generate(
-    model, 
-    initial_tokens, 
-    (conditional,);
-    max_new_tokens, 
-    sampler, 
-    tokenizer_for_printing, 
-    end_token, 
-    clear_cache, 
-    pos_offset, 
-    device, 
-    sdpa_func
-)
