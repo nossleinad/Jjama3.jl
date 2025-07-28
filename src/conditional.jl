@@ -137,14 +137,14 @@ function generate(
     pos_offset = 0,
     device = identity,
     sdpa_func = sdpa,
-    cache_padding = 0
+    kvcaching = true
 )
     tokens = vcat(initial_tokens, similar(initial_tokens, max_new_tokens))
     if clear_cache
         clear_cache!(model)
-        config_cache!(model, 0)#length(initial_tokens) + max_new_tokens + cache_padding)
+        config_cache!(model, ifelse(kvcaching, length(initial_tokens) + max_new_tokens, 0))
     else
-        extend_cache!(model, 0)#length(initial_tokens) + max_new_tokens + cache_padding)
+        extend_cache!(model, ifelse(kvcaching, length(initial_tokens) + max_new_tokens, 0))
     end
     input_tokens = device(reshape(initial_tokens, :, 1))  # (seq_len, batch=1)
     logits = model(input_tokens, conditionals, sdpa_func = sdpa_func)
@@ -155,7 +155,7 @@ function generate(
         return tokens
     end
     for _ in 1:max_new_tokens-1
-        input_tokens = device(reshape(tokens[1:model.pos+1], :, 1))  # Just the last token
+        input_tokens = device(reshape(tokens[ifelse(kvcaching, model.pos+1:model.pos+1, 1:model.pos+1)], :, 1))  # Just the last token
         logits = model(input_tokens, conditionals, sdpa_func = sdpa_func)
         nexttoken!(tokens, model, sampler, logits, tokenizer_for_printing)
         tokens[model.pos+1] == end_token && break
