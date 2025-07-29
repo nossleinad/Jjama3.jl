@@ -147,6 +147,7 @@ function generate(
         extend_cache!(model, ifelse(kvcaching, length(initial_tokens) + max_new_tokens, 0))
     end
     input_tokens = device(reshape(initial_tokens, :, 1))  # (seq_len, batch=1)
+    conditionals = device(conditionals)
     logits = model(input_tokens, conditionals, sdpa_func = sdpa_func)
     if max_new_tokens > 0
         nexttoken!(tokens, model, sampler, logits, tokenizer_for_printing)
